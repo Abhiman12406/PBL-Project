@@ -18,6 +18,7 @@ import { api } from '../services/api';
 import ForecastingTab from './ForecastingTab';
 import RoutingTab from './RoutingTab';
 import ComplianceTab from './ComplianceTab';
+import DigitalTwinTab from './DigitalTwinTab';
 
 const TABS = [
   { id: 'kpis', label: 'Executive KPIs', icon: BarChart3, viewRequired: 'kpis' },
@@ -326,19 +327,7 @@ export default function DashboardShell() {
             )}
 
             {activeTab === 'twin' && (
-              <div className="bright-card p-10 rounded-2xl text-center space-y-4 bg-white border-2 border-slate-200">
-                <div className="w-14 h-14 rounded-2xl bg-rose-100 border border-rose-300 flex items-center justify-center mx-auto text-[#FF1744]">
-                  <Activity className="w-7 h-7 stroke-[2.2]" />
-                </div>
-                <h3 className="text-xl font-extrabold text-slate-900">Digital Twin "What-If" Studio</h3>
-                <p className="text-xs font-medium text-slate-600 max-w-lg mx-auto leading-relaxed">
-                  Discrete-event network simulation modeling multi-echelon inventory propagation, port container bottlenecks, and automated contingency routing. Ready for Issue 06.
-                </p>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-xs font-bold text-rose-800">
-                  <CheckCircle2 className="w-4 h-4 text-rose-600" />
-                  <span>Authorized for: {profile?.title}</span>
-                </div>
-              </div>
+              <DigitalTwinTab />
             )}
 
             {activeTab === 'system' && (

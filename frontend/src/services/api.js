@@ -98,6 +98,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload)
     });
-  }
+  },
+  // Digital Twin Scenario Studio API
+  getTwinTopology: () => fetchWithPersona('/twin/topology'),
+  getTwinScenarios: () => fetchWithPersona('/twin/scenarios'),
+  simulateTwinScenario: (payload) => fetchWithPersona('/twin/simulate-scenario', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
 };
 

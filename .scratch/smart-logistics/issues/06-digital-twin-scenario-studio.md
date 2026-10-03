@@ -4,10 +4,10 @@
 
 **Blocked by:** 02: Predictive Demand Forecasting Vertical Slice, 03: Fleet Route Optimizer & Freight Matching Slice
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Multi-echelon logistics network topology (JNPT Port, Bhiwandi DC, Thane Hub, Nashik Depot, Pune Center) modeled with node capacities, replenishment lead times, and inventory holding costs.
-- [ ] Discrete-Event Simulation (DES) engine models inventory propagation, transit delays, stockout probabilities, and alternative mitigation routing during injected shocks.
-- [ ] API endpoint `POST /api/v1/twin/simulate-scenario` processes scenario selection, shock intensity (1–100%), and mitigation toggle, returning execution results and comparative metrics in $< 5$ seconds.
-- [ ] Frontend `DigitalTwinTab` displays scenario preset cards, interactive intensity slider, network topology node status diagram, and side-by-side comparative KPI cards (Baseline vs. Mitigated).
-- [ ] Automated tests assert simulation response time $< 5s$, metric calculation consistency, and mitigation improvement assertion ($mitigated\_sla\_delay \le baseline\_sla\_delay$).
+- [x] Multi-echelon logistics network topology (JNPT Port, Bhiwandi DC, Thane Hub, Nashik Depot, Pune Center) modeled with node capacities, replenishment lead times, and inventory holding costs.
+- [x] Discrete-Event Simulation (DES) engine models inventory propagation, transit delays, stockout probabilities, and alternative mitigation routing during injected shocks.
+- [x] API endpoint `POST /api/v1/twin/simulate-scenario` processes scenario selection, shock intensity (1–100%), and mitigation toggle, returning execution results and comparative metrics in $< 5$ seconds.
+- [x] Frontend `DigitalTwinTab` displays scenario preset cards, interactive intensity slider, network topology node status diagram, and side-by-side comparative KPI cards (Baseline vs. Mitigated).
+- [x] Automated tests assert simulation response time $< 5s$, metric calculation consistency, and mitigation improvement assertion ($mitigated\_sla\_delay \le baseline\_sla\_delay$).
