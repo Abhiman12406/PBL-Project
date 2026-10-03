@@ -83,6 +83,21 @@ class DemandForecastingEngine:
         self.model.to(self.device)
         self._initialize_or_load_weights()
 
+    def reload_weights(self, path: Optional[str] = None) -> bool:
+        """Reload PyTorch model weights from checkpoint file."""
+        target_path = path or MODEL_PATH
+        if os.path.exists(target_path):
+            try:
+                state_dict = torch.load(target_path, map_location=self.device, weights_only=True)
+                self.model.load_state_dict(state_dict)
+                self.model.eval()
+                logger.info("Successfully reloaded forecasting weights from %s", target_path)
+                return True
+            except Exception as e:
+                logger.warning("Failed to reload weights from %s: %s", target_path, str(e))
+                return False
+        return False
+
     def _initialize_or_load_weights(self):
         """Load pre-trained weights if available; otherwise train/initialize and save checkpoint."""
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -95,6 +110,7 @@ class DemandForecastingEngine:
                 return
             except Exception as e:
                 logger.warning("Could not load weights from %s (%s). Re-initializing...", MODEL_PATH, str(e))
+
 
         # Initialize with synthetic training loop for realistic multi-step weights
         logger.info("Initializing and calibrating PyTorch LSTM forecaster...")

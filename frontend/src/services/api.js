@@ -51,6 +51,10 @@ export const api = {
   }),
   getPersonaRoles: () => fetchWithPersona('/persona/roles'),
   getAdminSystemStatus: () => fetchWithPersona('/admin/system-status'),
+  retrainModels: (payload = { models: 'all', epochs: 10 }) => fetchWithPersona('/admin/retrain-models', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
   getForecastingSKUs: () => fetchWithPersona('/forecasting/skus'),
   getHistoricalDemand: (skuId, days = 30) => fetchWithPersona(`/forecasting/historical/${skuId}?days=${days}`),
   predictDemand: (payload) => fetchWithPersona('/forecasting/predict', {

@@ -4,10 +4,11 @@
 
 **Blocked by:** 04: Real-Time Telemetry & Live Simulation Playback Slice, 05: Trade Compliance & IDP Orchestrator Slice, 06: Digital Twin Scenario Studio Slice
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Standalone script `backend/train_models.py` generates and saves lightweight PyTorch `.pt` model weights for forecasting and routing engines.
-- [ ] Automated end-to-end integration test suite executes tests across all 4 engine endpoints and WebSocket streams, verifying compliance with `SPECIFICATION.md`.
-- [ ] Graceful fallback mode verified: system operates identically with in-memory fixtures when Dockerized PostgreSQL or Redis are not running.
-- [ ] Top-bar Persona Switcher verified across all 4 roles to ensure correct tab rendering, metric filtering, and user guidance.
-- [ ] Comprehensive `README.md` documented with architecture diagram, prerequisites, 1-command startup instructions, sample API calls, and persona walkthrough.
+- [x] Standalone script `backend/train_models.py` generates and saves lightweight PyTorch `.pt` model weights for forecasting and routing engines.
+- [x] Automated end-to-end integration test suite executes tests across all 4 engine endpoints and WebSocket streams, verifying compliance with `SPECIFICATION.md`.
+- [x] Graceful fallback mode verified: system operates identically with in-memory fixtures when Dockerized PostgreSQL or Redis are not running.
+- [x] Top-bar Persona Switcher verified across all 4 roles to ensure correct tab rendering, metric filtering, and user guidance.
+- [x] Comprehensive `README.md` documented with architecture diagram, prerequisites, 1-command startup instructions, sample API calls, and persona walkthrough.
+

@@ -152,6 +152,21 @@ class FleetRouteOptimizerEngine:
         self.policy_net.to(self.device)
         self._initialize_or_load_weights()
 
+    def reload_weights(self, path: Optional[str] = None) -> bool:
+        """Reload PyTorch policy weights from checkpoint file."""
+        target_path = path or MODEL_PATH
+        if os.path.exists(target_path):
+            try:
+                state_dict = torch.load(target_path, map_location=self.device, weights_only=True)
+                self.policy_net.load_state_dict(state_dict)
+                self.policy_net.eval()
+                logger.info("Successfully reloaded routing DRL policy weights from %s", target_path)
+                return True
+            except Exception as e:
+                logger.warning("Failed to reload routing weights from %s: %s", target_path, str(e))
+                return False
+        return False
+
     def _initialize_or_load_weights(self):
         """Load pre-trained policy weights if present; otherwise initialize and save checkpoint."""
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -164,6 +179,7 @@ class FleetRouteOptimizerEngine:
                 return
             except Exception as e:
                 logger.warning("Could not load weights from %s (%s). Reinitializing...", MODEL_PATH, str(e))
+
 
         # Calibrate initial weights with standard orthogonal initialization
         for m in self.policy_net.modules():
