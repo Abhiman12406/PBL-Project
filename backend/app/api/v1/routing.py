@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.connection import get_db
 from app.core.rbac import require_role
 from app.engines.routing_engine import routing_engine
+from app.engines.telemetry_engine import telemetry_engine
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,13 @@ def optimize_route(
             traffic_mode=request.traffic_mode or "STANDARD",
             db=db
         )
+        # Synchronize vehicle active route with telemetry simulation engine
+        try:
+            v_id = result.get("vehicle_id", "TRK-MH-01")
+            telemetry_engine.set_active_route(v_id, result)
+        except Exception as te_err:
+            logger.debug("Telemetry sync error: %s", str(te_err))
+
         return result
     except ValueError as ve:
         # Handles capacity limit breaches or invalid inputs
@@ -132,6 +140,12 @@ def assign_backhaul(
             backhaul_id=request.backhaul_id,
             db=db
         )
+        try:
+            v_id = result.get("vehicle_id", "TRK-MH-01")
+            telemetry_engine.set_active_route(v_id, result)
+        except Exception as te_err:
+            logger.debug("Telemetry sync error: %s", str(te_err))
+
         return {
             "status": "SUCCESS",
             "assigned_backhaul_id": request.backhaul_id,

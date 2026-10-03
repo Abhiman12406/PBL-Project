@@ -64,6 +64,18 @@ export const api = {
   assignBackhaul: (payload) => fetchWithPersona('/routing/assign-backhaul', {
     method: 'POST',
     body: JSON.stringify(payload)
+  }),
+  getTelemetryState: () => fetchWithPersona('/telemetry/state'),
+  controlTelemetry: (action, speedMultiplier = 1.0, stepSeconds = 15) => fetchWithPersona('/telemetry/control', {
+    method: 'POST',
+    body: JSON.stringify({ action, speed_multiplier: speedMultiplier, step_seconds: stepSeconds })
+  }),
+  injectDisruption: (payload) => fetchWithPersona('/telemetry/inject-disruption', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
+  clearDisruptions: () => fetchWithPersona('/telemetry/clear-disruptions', {
+    method: 'POST'
   })
 };
 

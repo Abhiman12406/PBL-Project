@@ -1,10 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.core.rbac import RBACMiddleware
 from app.api.v1.router import api_router
+from app.api.v1.telemetry import telemetry_hub
 from app.db.connection import db_manager
 from app.db.seed_data import seed_initial_data
 
@@ -52,6 +53,11 @@ app.add_middleware(RBACMiddleware)
 
 # Include API v1 Router
 app.include_router(api_router)
+
+
+@app.websocket("/ws/telemetry")
+async def websocket_telemetry_endpoint(websocket: WebSocket):
+    await telemetry_hub.handle_client(websocket)
 
 
 @app.get("/")

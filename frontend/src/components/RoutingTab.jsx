@@ -16,9 +16,16 @@ import {
   Compass,
   Package,
   Zap,
-  Activity
+  Activity,
+  Radio,
+  Thermometer,
+  BatteryCharging,
+  ShieldAlert,
+  Flame
 } from 'lucide-react';
 import { api } from '../services/api';
+import { telemetryWS } from '../services/websocket';
+import SimulationBar from './SimulationBar';
 
 // Fix Leaflet standard marker icon paths in Vite
 delete L.Icon.Default.prototype._getIconUrl;
@@ -28,7 +35,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-// Custom Leaflet DivIcon helpers for modern daylight aesthetic
+// Custom Leaflet DivIcon helpers for stop waypoints
 function createCustomMarkerIcon(type, number) {
   let bgColor = '#0F172A';
   let borderColor = '#334155';
@@ -60,29 +67,252 @@ function createCustomMarkerIcon(type, number) {
         color: ${textColor};
         border: 2px solid ${borderColor};
         border-radius: 9999px;
-        width: 32px;
-        height: 32px;
+        width: 30px;
+        height: 30px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 800;
-        font-size: 13px;
+        font-size: 12px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
       ">
         ${text}
       </div>
     `,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-    popupAnchor: [0, -18]
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -16]
   });
+}
+
+// Live Vehicle Truck Marker with Heading Rotation & Pulsing Radar Wave
+function createVehicleMarkerIcon(vehicle) {
+  const isRerouted = vehicle?.is_rerouted;
+  const heading = vehicle?.heading || 0;
+  const plate = vehicle?.vehicle_id || 'TRK';
+  const speed = vehicle?.speed_kmh != null ? `${Math.round(vehicle.speed_kmh)} km/h` : '0';
+
+  return L.divIcon({
+    className: 'live-vehicle-marker-wrapper',
+    html: `
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+        <!-- Pulsing radar ping wave -->
+        <div style="
+          position: absolute;
+          width: 44px;
+          height: 44px;
+          top: -5px;
+          left: -4px;
+          border-radius: 9999px;
+          background: ${isRerouted ? 'rgba(255, 23, 68, 0.35)' : 'rgba(0, 200, 83, 0.3)'};
+          animation: ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+          pointer-events: none;
+        "></div>
+        <!-- Truck directional badge -->
+        <div style="
+          background: ${isRerouted ? '#FF1744' : '#0F172A'};
+          color: #FFFFFF;
+          border: 2.5px solid ${isRerouted ? '#FFD600' : '#00E676'};
+          border-radius: 9999px;
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+          position: relative;
+          z-index: 10;
+        ">
+          <!-- Rotated heading arrow -->
+          <svg style="transform: rotate(${heading}deg); transition: transform 0.4s ease;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 19 21 12 17 5 21 12 2" fill="white" />
+          </svg>
+        </div>
+        <!-- Live telemetry badge label -->
+        <div style="
+          background: #0F172A;
+          color: #FFFFFF;
+          border: 1px solid ${isRerouted ? '#FF5400' : '#334155'};
+          border-radius: 6px;
+          padding: 1.5px 6px;
+          margin-top: 3px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          font-weight: 800;
+          white-space: nowrap;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          z-index: 10;
+        ">
+          <span style="color: ${isRerouted ? '#FF5400' : '#00E676'};">●</span>
+          <span>${plate}</span>
+          <span style="color: #64748B;">|</span>
+          <span style="color: #FFB703;">${speed}</span>
+        </div>
+      </div>
+    `,
+    iconSize: [36, 56],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -22]
+  });
+}
+
+// Roadblock Hazard DivIcon
+function createRoadblockMarkerIcon(roadblock) {
+  return L.divIcon({
+    className: 'roadblock-hazard-wrapper',
+    html: `
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+        <div style="
+          position: absolute;
+          width: 50px;
+          height: 50px;
+          top: -8px;
+          left: -7px;
+          border-radius: 9999px;
+          background: rgba(255, 23, 68, 0.4);
+          animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+          pointer-events: none;
+        "></div>
+        <div style="
+          background: #D50000;
+          color: #FFFFFF;
+          border: 2px solid #FFFFFF;
+          border-radius: 10px;
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+          box-shadow: 0 4px 12px rgba(213, 0, 0, 0.5);
+          z-index: 10;
+        ">
+          ⛔
+        </div>
+        <div style="
+          background: #B71C1C;
+          color: #FFFFFF;
+          border: 1px solid #FF8A80;
+          border-radius: 4px;
+          padding: 1px 5px;
+          margin-top: 3px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 9px;
+          font-weight: 900;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          white-space: nowrap;
+          z-index: 10;
+        ">
+          ROADBLOCK
+        </div>
+      </div>
+    `,
+    iconSize: [36, 56],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -22]
+  });
+}
+
+// Popup HTML builder for Live Vehicle Marker
+function getVehiclePopupHtml(v) {
+  const isRerouted = v.is_rerouted;
+  const soc = v.battery_fuel_soc_pct != null ? v.battery_fuel_soc_pct : 100;
+  const socColor = soc > 50 ? '#00C853' : soc > 20 ? '#FFB703' : '#FF1744';
+
+  return `
+    <div style="font-family: inherit; font-size: 12px; line-height: 1.4; color: #0F172A; min-width: 230px; padding: 2px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px; margin-bottom: 8px;">
+        <div>
+          <div style="font-weight: 800; font-size: 14px; color: #0F172A;">${v.vehicle_id}</div>
+          <div style="font-size: 11px; font-weight: 600; color: #64748B;">${v.plate_number || 'Commercial Fleet'} &bull; ${v.vehicle_type || 'Reefer'}</div>
+        </div>
+        <span style="
+          font-size: 10px;
+          font-weight: 800;
+          text-transform: uppercase;
+          padding: 2px 8px;
+          border-radius: 6px;
+          background: ${isRerouted ? '#FEE2E2' : '#DCFCE7'};
+          color: ${isRerouted ? '#991B1B' : '#166534'};
+          border: 1px solid ${isRerouted ? '#FCA5A5' : '#86EFAC'};
+        ">
+          ${isRerouted ? 'REROUTED' : v.status || 'IN TRANSIT'}
+        </span>
+      </div>
+
+      ${isRerouted ? `
+        <div style="background: #FFFBEB; border: 1px solid #FCD34D; color: #92400E; padding: 6px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; margin-bottom: 8px;">
+          ⚠️ Dynamic Detour: Bypassed Kasara Ghat (+21.6 km, +34m)
+        </div>
+      ` : ''}
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 6px; border-radius: 6px;">
+          <div style="font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase;">Live Speed</div>
+          <div style="font-size: 13px; font-weight: 800; font-family: monospace; color: #0F172A;">${v.speed_kmh} km/h</div>
+        </div>
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 6px; border-radius: 6px;">
+          <div style="font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase;">Cargo Temp</div>
+          <div style="font-size: 13px; font-weight: 800; font-family: monospace; color: #0284C7;">${v.cargo_temp_c}&deg;C</div>
+        </div>
+      </div>
+
+      <!-- Battery / Fuel SoC Bar -->
+      <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; margin-bottom: 4px;">
+          <span style="color: #64748B;">Battery / Fuel SoC:</span>
+          <span style="font-family: monospace; font-weight: 800; color: ${socColor};">${soc}%</span>
+        </div>
+        <div style="width: 100%; height: 6px; background: #E2E8F0; border-radius: 9999px; overflow: hidden;">
+          <div style="width: ${soc}%; height: 100%; background: ${socColor}; border-radius: 9999px;"></div>
+        </div>
+      </div>
+
+      <!-- Route Progress & ETA -->
+      <div style="font-size: 11px; color: #475569; space-y: 2px;">
+        <div><strong>GPS:</strong> <span style="font-family: monospace;">${v.latitude?.toFixed(4)}, ${v.longitude?.toFixed(4)}</span></div>
+        <div><strong>Heading:</strong> ${Math.round(v.heading || 0)}&deg; &bull; <strong>ETA:</strong> ~${v.eta_mins || 0} mins</div>
+        <div><strong>Traveled:</strong> ${v.distance_traveled_km || 0} km (${v.progress_pct || 0}%)</div>
+        <div><strong>Next Stop:</strong> <span style="font-weight: 700; color: #0F172A;">${v.next_stop_name || 'Destination'}</span></div>
+      </div>
+    </div>
+  `;
+}
+
+// Popup HTML builder for Roadblock Marker
+function getRoadblockPopupHtml(rb) {
+  return `
+    <div style="font-family: inherit; font-size: 12px; line-height: 1.4; color: #0F172A; min-width: 210px; padding: 2px;">
+      <div style="display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #FECACA; padding-bottom: 4px; margin-bottom: 6px;">
+        <span style="font-size: 16px;">⛔</span>
+        <div style="font-weight: 800; font-size: 13px; color: #B91C1C;">${rb.name}</div>
+      </div>
+      <div style="background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; padding: 6px; border-radius: 6px; margin-bottom: 6px; font-weight: 600; font-size: 11px;">
+        ${rb.description}
+      </div>
+      <div style="font-size: 11px; color: #475569;">
+        <div><strong>Severity:</strong> <span style="color: #DC2626; font-weight: 800;">${rb.severity}</span></div>
+        <div><strong>Edge Cost Penalty:</strong> ${rb.penalty_multiplier}x Normal</div>
+        <div><strong>Incident Radius:</strong> ${rb.radius_km} km</div>
+        <div><strong>Coordinates:</strong> ${rb.latitude?.toFixed(4)}, ${rb.longitude?.toFixed(4)}</div>
+      </div>
+    </div>
+  `;
 }
 
 export default function RoutingTab() {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const routePolylineRef = useRef(null);
+  const detourPolylineRef = useRef(null);
   const markersGroupRef = useRef(null);
+  const vehicleMarkersGroupRef = useRef(null);
+  const roadblocksGroupRef = useRef(null);
+  const vehicleMarkersMapRef = useRef({});
 
   // Fixtures and control states
   const [fixtures, setFixtures] = useState(null);
@@ -100,6 +330,12 @@ export default function RoutingTab() {
   // Backhaul assignment states
   const [assigningBackhaulId, setAssigningBackhaulId] = useState(null);
   const [backhaulSuccessMessage, setBackhaulSuccessMessage] = useState(null);
+
+  // Real-Time Telemetry & Simulation states
+  const [liveVehicles, setLiveVehicles] = useState([]);
+  const [activeRoadblocks, setActiveRoadblocks] = useState([]);
+  const [rerouteAlert, setRerouteAlert] = useState(null);
+  const [trackedVehicleId, setTrackedVehicleId] = useState('TRK-MH-01');
 
   // 1. Fetch initial routing fixtures
   const fetchFixtures = useCallback(async () => {
@@ -131,7 +367,7 @@ export default function RoutingTab() {
     if (!mapContainerRef.current) return;
     if (mapInstanceRef.current) return; // Already initialized
 
-    // Center on Western India Corridor (approx between Mumbai and Nashik)
+    // Center on Western India Corridor (JNPT ↔ Thane ↔ Kasara ↔ Nashik)
     const map = L.map(mapContainerRef.current, {
       center: [19.45, 73.30],
       zoom: 8,
@@ -146,15 +382,140 @@ export default function RoutingTab() {
     }).addTo(map);
 
     markersGroupRef.current = L.featureGroup().addTo(map);
+    detourPolylineRef.current = null;
+    vehicleMarkersGroupRef.current = L.featureGroup().addTo(map);
+    roadblocksGroupRef.current = L.featureGroup().addTo(map);
     mapInstanceRef.current = map;
 
     return () => {
       map.remove();
       mapInstanceRef.current = null;
+      vehicleMarkersMapRef.current = {};
     };
   }, []);
 
-  // 3. Trigger Route Optimization
+  // 3. Connect to WebSocket Telemetry Hub & Listen to Ticks / Reroutes
+  useEffect(() => {
+    telemetryWS.connect();
+
+    const unsubTick = telemetryWS.subscribe('tick', (tickMsg) => {
+      if (tickMsg.vehicles) {
+        setLiveVehicles(tickMsg.vehicles);
+      }
+      if (tickMsg.active_roadblocks) {
+        setActiveRoadblocks(tickMsg.active_roadblocks);
+      }
+    });
+
+    const unsubReroute = telemetryWS.subscribe('reroute', (event) => {
+      handleRerouteEvent(event);
+    });
+
+    const unsubCleared = telemetryWS.subscribe('roadblocksCleared', () => {
+      setActiveRoadblocks([]);
+      setRerouteAlert(null);
+      // Remove detour polyline if any
+      if (detourPolylineRef.current) {
+        detourPolylineRef.current.remove();
+        detourPolylineRef.current = null;
+      }
+    });
+
+    // Initial load of telemetry state
+    api.getTelemetryState().then(res => {
+      if (res.vehicles) setLiveVehicles(res.vehicles);
+      if (res.active_roadblocks) setActiveRoadblocks(res.active_roadblocks);
+    }).catch(err => console.debug('Initial telemetry state REST load:', err));
+
+    return () => {
+      unsubTick();
+      unsubReroute();
+      unsubCleared();
+    };
+  }, []);
+
+  // 4. Handle Re-routing Event (Dynamic detours & polyline updates)
+  const handleRerouteEvent = useCallback((event) => {
+    const map = mapInstanceRef.current;
+    if (!event) return;
+
+    const details = event.reroute_details?.[0];
+    if (details) {
+      setRerouteAlert({
+        vehicleId: details.vehicle_id,
+        reason: details.detour_reason,
+        addedKm: details.added_distance_km,
+        addedMins: details.added_duration_mins
+      });
+
+      // If new route geometry arrived, update map polyline dynamically!
+      if (details.new_route_geometry && map) {
+        if (detourPolylineRef.current) {
+          detourPolylineRef.current.remove();
+        }
+
+        // Draw animated detour polyline in safety red/crimson with dashed stroke
+        const detourLine = L.polyline(details.new_route_geometry, {
+          color: '#FF1744',
+          weight: 6,
+          opacity: 0.9,
+          dashArray: '10, 8',
+          lineJoin: 'round'
+        }).addTo(map);
+
+        detourPolylineRef.current = detourLine;
+
+        // If the original polyline is present, fade it slightly
+        if (routePolylineRef.current) {
+          routePolylineRef.current.setStyle({ opacity: 0.35, color: '#94A3B8' });
+        }
+      }
+    }
+  }, []);
+
+  // 5. Update Vehicle Markers and Roadblock Markers on Map
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const vGroup = vehicleMarkersGroupRef.current;
+    const rbGroup = roadblocksGroupRef.current;
+    if (!map || !vGroup || !rbGroup) return;
+
+    // A. Update active vehicle markers
+    liveVehicles.forEach((v) => {
+      let marker = vehicleMarkersMapRef.current[v.vehicle_id];
+      const icon = createVehicleMarkerIcon(v);
+      const popupHtml = getVehiclePopupHtml(v);
+
+      if (!marker) {
+        marker = L.marker([v.latitude, v.longitude], {
+          icon,
+          zIndexOffset: 1000
+        }).addTo(vGroup);
+        marker.bindPopup(popupHtml);
+        marker.on('click', () => setTrackedVehicleId(v.vehicle_id));
+        vehicleMarkersMapRef.current[v.vehicle_id] = marker;
+      } else {
+        marker.setLatLng([v.latitude, v.longitude]);
+        marker.setIcon(icon);
+        const popup = marker.getPopup();
+        if (popup && popup.isOpen()) {
+          popup.setContent(popupHtml);
+        }
+      }
+    });
+
+    // B. Update Roadblock Hazard Markers
+    rbGroup.clearLayers();
+    activeRoadblocks.forEach((rb) => {
+      const rbMarker = L.marker([rb.latitude, rb.longitude], {
+        icon: createRoadblockMarkerIcon(rb),
+        zIndexOffset: 950
+      }).addTo(rbGroup);
+      rbMarker.bindPopup(getRoadblockPopupHtml(rb));
+    });
+  }, [liveVehicles, activeRoadblocks]);
+
+  // 6. Trigger Route Optimization
   const handleOptimizeRoute = useCallback(async () => {
     if (!fixtures) return;
     setOptimizing(true);
@@ -229,24 +590,24 @@ export default function RoutingTab() {
     }
   }, [fixtures]);
 
-  // 4. Update Leaflet Map with Polyline and Markers
+  // 7. Update Leaflet Map with Planned Route Polyline and Stop Markers
   useEffect(() => {
     const map = mapInstanceRef.current;
     const markersGroup = markersGroupRef.current;
     if (!map || !markersGroup || !routeResult) return;
 
-    // Clear previous markers and polyline
+    // Clear previous stop markers and polyline
     markersGroup.clearLayers();
     if (routePolylineRef.current) {
       routePolylineRef.current.remove();
       routePolylineRef.current = null;
     }
 
-    const { waypoints_sequence, route_geometry, traffic_mode } = routeResult;
+    const { waypoints_sequence, route_geometry, traffic_mode: tMode } = routeResult;
 
     // Draw Route Polyline
     if (route_geometry && route_geometry.length > 0) {
-      const isCongested = traffic_mode === 'CONGESTED';
+      const isCongested = tMode === 'CONGESTED';
       const polyline = L.polyline(route_geometry, {
         color: isCongested ? '#FF1744' : '#FF5400',
         weight: 5,
@@ -297,7 +658,7 @@ export default function RoutingTab() {
     }
   }, [routeResult]);
 
-  // 5. One-Click Backhaul Assignment Handler
+  // 8. One-Click Backhaul Assignment Handler
   const handleAssignBackhaul = async (backhaulId) => {
     if (!routeResult) return;
     setAssigningBackhaulId(backhaulId);
@@ -342,6 +703,22 @@ export default function RoutingTab() {
   const capacityPct = Math.min(100, Math.round((currentTotalWeight / maxCap) * 100));
   const isOverCapacity = currentTotalWeight > maxCap;
 
+  // Active tracked vehicle for telematics sensor gauges
+  const trackedVehicle = liveVehicles.find(v => v.vehicle_id === trackedVehicleId) || liveVehicles[0] || {
+    vehicle_id: 'TRK-MH-01',
+    plate_number: 'MH-04-GP-8821',
+    speed_kmh: 62.0,
+    battery_fuel_soc_pct: 94.5,
+    cargo_temp_c: 4.1,
+    heading: 48,
+    status: 'IN_TRANSIT',
+    distance_traveled_km: 0.0,
+    total_route_distance_km: 178.5,
+    progress_pct: 0.0,
+    next_stop_name: 'Thane Cold Chain DC',
+    eta_mins: 95
+  };
+
   if (loadingFixtures && !fixtures) {
     return (
       <div className="bright-card p-12 rounded-2xl bg-white border-2 border-slate-200 text-center space-y-4">
@@ -355,8 +732,39 @@ export default function RoutingTab() {
   }
 
   return (
-    <div className="space-y-6 w-full">
-      {/* Tab Header Banner */}
+    <div className="space-y-5 w-full">
+      {/* 1. Global Real-Time Simulation Playback & Disruption Injection Bar */}
+      <SimulationBar onRerouteEvent={handleRerouteEvent} />
+
+      {/* Dynamic Roadblock & Re-Routing Warning Banner */}
+      {rerouteAlert && (
+        <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-slate-900 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-5 h-5 stroke-[2.5]" />
+            </div>
+            <div>
+              <div className="text-xs font-extrabold text-rose-900 uppercase tracking-wider flex items-center gap-2">
+                <span>Autonomous Re-Routing Triggered</span>
+                <span className="text-[10px] bg-rose-200 text-rose-900 px-2 py-0.5 rounded-full font-mono-num font-bold">
+                  +{rerouteAlert.addedKm} km / +{rerouteAlert.addedMins}m
+                </span>
+              </div>
+              <div className="text-xs text-slate-700 font-medium mt-0.5">
+                {rerouteAlert.reason}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setRerouteAlert(null)}
+            className="text-xs font-bold text-rose-700 hover:text-rose-900 px-3 py-1.5 rounded-lg bg-rose-100 border border-rose-200"
+          >
+            Dismiss Alert
+          </button>
+        </div>
+      )}
+
+      {/* 2. Tab Header Banner */}
       <div className="bright-card rounded-2xl p-6 bg-white border-2 border-slate-200">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -366,7 +774,7 @@ export default function RoutingTab() {
               </span>
               <span className="text-xs text-slate-300">•</span>
               <span className="text-xs font-semibold text-slate-600">
-                PyTorch Neural VRP & Freight Matching Engine
+                PyTorch Neural VRP & Live Telemetry Stream
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
@@ -377,7 +785,7 @@ export default function RoutingTab() {
             </h2>
             <p className="text-xs sm:text-sm font-medium text-slate-600 max-w-3xl mt-1.5 leading-relaxed">
               Dynamically solve optimal multi-stop vehicle schedules across Mumbai, JNPT, Thane, Kasara Ghat, Nashik, and Pune. 
-              Eliminate costly unladen "empty kilometers" through AI-matched return hauls.
+              Track animated truck coordinates, cold-chain temperature telematics, and autonomous roadblock detours in real time.
             </p>
           </div>
 
@@ -418,7 +826,140 @@ export default function RoutingTab() {
         )}
       </div>
 
-      {/* Control Panel Grid: Vehicle, Traffic, Depot, Capacity Utilization */}
+      {/* 3. Live Telematics Sensor Telemetry Dashboard Card */}
+      <div className="bright-card p-5 rounded-2xl bg-white border-2 border-slate-200 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-2.5">
+            <Radio className="w-4 h-4 text-emerald-600 animate-pulse" />
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+              Live Vehicle IoT Telemetry Stream
+            </h3>
+            <span className="text-[10px] font-mono-num font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300">
+              1.0 Hz Cadence
+            </span>
+          </div>
+
+          {/* Vehicle Switcher */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-slate-500 uppercase">Track Unit:</span>
+            <div className="flex gap-1">
+              {['TRK-MH-01', 'TRK-MH-02'].map(vId => (
+                <button
+                  key={vId}
+                  onClick={() => setTrackedVehicleId(vId)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition ${
+                    trackedVehicleId === vId
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {vId}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 4 Core Telemetry Gauges */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Gauge 1: Speed */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase">
+              <span className="flex items-center gap-1.5">
+                <Gauge className="w-3.5 h-3.5 text-orange-600" />
+                Live Speed
+              </span>
+              <span className="font-mono-num text-[10px] text-slate-400">OBD-II</span>
+            </div>
+            <div className="flex items-baseline gap-1.5 pt-1">
+              <span className="text-2xl font-extrabold text-slate-900 font-mono-num">
+                {trackedVehicle.speed_kmh}
+              </span>
+              <span className="text-xs font-semibold text-slate-500">km/h</span>
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium">
+              Heading: <strong className="text-slate-800 font-mono-num">{Math.round(trackedVehicle.heading || 0)}&deg;</strong> &bull; GPS Active
+            </div>
+          </div>
+
+          {/* Gauge 2: Battery / Fuel State of Charge */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase">
+              <span className="flex items-center gap-1.5">
+                <BatteryCharging className="w-3.5 h-3.5 text-emerald-600" />
+                Fuel / SoC State
+              </span>
+              <span className={`text-[10px] font-bold font-mono-num ${trackedVehicle.battery_fuel_soc_pct < 25 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                {trackedVehicle.battery_fuel_soc_pct}%
+              </span>
+            </div>
+            <div className="pt-2">
+              <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    trackedVehicle.battery_fuel_soc_pct > 50
+                      ? 'bg-emerald-500'
+                      : trackedVehicle.battery_fuel_soc_pct > 25
+                      ? 'bg-amber-500'
+                      : 'bg-rose-500'
+                  }`}
+                  style={{ width: `${Math.min(100, trackedVehicle.battery_fuel_soc_pct || 0)}%` }}
+                />
+              </div>
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium pt-1">
+              Estimated range: <strong className="text-slate-800 font-mono-num">~{(trackedVehicle.battery_fuel_soc_pct * 3.8).toFixed(0)} km</strong>
+            </div>
+          </div>
+
+          {/* Gauge 3: Cold-Chain Cargo Temperature */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase">
+              <span className="flex items-center gap-1.5">
+                <Thermometer className="w-3.5 h-3.5 text-blue-600" />
+                Reefer Cargo Temp
+              </span>
+              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded font-mono-num">
+                2°C-8°C SLA
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1.5 pt-1">
+              <span className="text-2xl font-extrabold text-blue-900 font-mono-num">
+                {trackedVehicle.cargo_temp_c}
+              </span>
+              <span className="text-xs font-semibold text-slate-500">&deg;C</span>
+            </div>
+            <div className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              <span>Cold Chain Integrity Optimal</span>
+            </div>
+          </div>
+
+          {/* Gauge 4: Route Progress & Next Stop */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase">
+              <span className="flex items-center gap-1.5">
+                <Navigation className="w-3.5 h-3.5 text-purple-600" />
+                Route Progress
+              </span>
+              <span className="text-[10px] font-bold font-mono-num text-slate-700">
+                {trackedVehicle.progress_pct}%
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1 pt-1">
+              <span className="text-lg font-extrabold text-slate-900 font-mono-num">
+                {trackedVehicle.distance_traveled_km}
+              </span>
+              <span className="text-xs text-slate-500">/ {trackedVehicle.total_route_distance_km} km</span>
+            </div>
+            <div className="text-[10px] text-slate-600 font-medium truncate">
+              Next: <strong className="text-slate-900">{trackedVehicle.next_stop_name || 'En Route'}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Control Panel Grid: Vehicle, Traffic, Depot, Capacity Utilization */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Fleet Vehicle Selector */}
         <div className="bright-card p-4 rounded-xl bg-white border border-slate-200 space-y-2">
@@ -433,7 +974,10 @@ export default function RoutingTab() {
           </div>
           <select
             value={selectedVehicleId}
-            onChange={(e) => setSelectedVehicleId(e.target.value)}
+            onChange={(e) => {
+              setSelectedVehicleId(e.target.value);
+              setTrackedVehicleId(e.target.value);
+            }}
             className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg p-2 text-slate-900 focus:outline-none focus:border-orange-500"
           >
             {fixtures?.fleet_vehicles?.map(v => (
@@ -448,15 +992,15 @@ export default function RoutingTab() {
           </div>
         </div>
 
-        {/* 2. Starting Depot Hub */}
+        {/* 2. Central Depot Selector */}
         <div className="bright-card p-4 rounded-xl bg-white border border-slate-200 space-y-2">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span className="flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-orange-600" />
-              Departure Depot
+              Corridor Central Depot
             </span>
-            <span className="text-[10px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded font-bold">
-              ORIGIN
+            <span className="text-[10px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded font-bold uppercase">
+              Origin
             </span>
           </div>
           <select
@@ -466,34 +1010,27 @@ export default function RoutingTab() {
           >
             {fixtures?.depots?.map(d => (
               <option key={d.node_id} value={d.node_id}>
-                {d.name} ({d.city})
+                {d.name} &bull; {d.city}
               </option>
             ))}
           </select>
-          <div className="text-[11px] font-semibold text-slate-500 flex justify-between">
-            <span>Corridor Gateway:</span>
-            <span className="font-semibold text-slate-800">
-              {fixtures?.depots?.find(d => d.node_id === selectedDepotId)?.city || 'Navi Mumbai'}
-            </span>
+          <div className="text-[11px] font-semibold text-slate-500">
+            Automated return routing to central corridor origin
           </div>
         </div>
 
-        {/* 3. Traffic Mode Toggle */}
+        {/* 3. Traffic Congestion Mode Selector */}
         <div className="bright-card p-4 rounded-xl bg-white border border-slate-200 space-y-2">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span className="flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-orange-600" />
-              Traffic Conditions
+              <Clock className="w-3.5 h-3.5 text-orange-600" />
+              Corridor Traffic Flow
             </span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-              trafficMode === 'CONGESTED' 
-                ? 'bg-rose-100 text-rose-800 border border-rose-200' 
-                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-            }`}>
+            <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-bold">
               {trafficMode}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-lg">
+          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-lg">
             <button
               onClick={() => setTrafficMode('STANDARD')}
               className={`py-1.5 text-xs font-bold rounded-md transition ${
@@ -548,7 +1085,7 @@ export default function RoutingTab() {
         </div>
       </div>
 
-      {/* Main Interactive Map & Route Telematics Section */}
+      {/* 5. Main Interactive Map & Route Telematics Section */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Side: Leaflet.js Interactive Map (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col space-y-4">
@@ -563,7 +1100,7 @@ export default function RoutingTab() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-semibold text-slate-500">
-                  {routeResult?.waypoints_sequence?.length || 0} Scheduled Waypoints
+                  {routeResult?.waypoints_sequence?.length || 0} Scheduled Waypoints &bull; {liveVehicles.length} Telemetry Units
                 </span>
               </div>
             </div>
@@ -571,8 +1108,8 @@ export default function RoutingTab() {
             {/* Leaflet Map Canvas Container */}
             <div
               ref={mapContainerRef}
-              className="w-full h-[460px] bg-slate-100 relative z-0"
-              style={{ minHeight: '460px' }}
+              className="w-full h-[480px] bg-slate-100 relative z-0"
+              style={{ minHeight: '480px' }}
             />
 
             {/* Map Legend Footer */}
@@ -588,13 +1125,19 @@ export default function RoutingTab() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
-                  <span>Backhaul Cargo</span>
+                  <span>Live Vehicle</span>
                 </div>
+                {activeRoadblocks.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-rose-600 font-bold">
+                    <span className="w-3 h-3 rounded-full bg-rose-600 animate-ping inline-block" />
+                    <span>Roadblock / Detour</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-slate-400 font-mono-num">
-                  Route ID: {routeResult?.route_id || 'PENDING'}
+                  Route: {routeResult?.route_id || 'PENDING'}
                 </span>
               </div>
             </div>

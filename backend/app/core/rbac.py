@@ -12,8 +12,8 @@ PERSONA_PROFILES: Dict[str, Dict[str, Any]] = {
         "description": "Strategic network KPI oversight, demand forecasting, risk stress-testing, and executive analytics.",
         "badge_color": "orange",
         "permissions": {
-            "views": ["dashboard", "forecasting", "twin", "kpis"],
-            "actions": ["view_kpis", "run_forecast", "run_twin_simulation", "export_reports"]
+            "views": ["dashboard", "forecasting", "routing", "twin", "telemetry", "kpis"],
+            "actions": ["view_kpis", "run_forecast", "view_fleet", "optimize_routes", "inject_roadblock", "telemetry_control", "run_twin_simulation", "export_reports"]
         }
     },
     "dispatcher": {
