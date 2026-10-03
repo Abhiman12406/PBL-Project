@@ -9,7 +9,7 @@ export const FALLBACK_PROFILES = {
     role: 'director',
     title: 'Supply Chain Director',
     description: 'Strategic network KPI oversight, demand forecasting, risk stress-testing, and executive analytics.',
-    badge_color: 'indigo',
+    badge_color: 'orange',
     permissions: {
       views: ['dashboard', 'forecasting', 'twin', 'kpis'],
       actions: ['view_kpis', 'run_forecast', 'run_twin_simulation', 'export_reports']
@@ -39,7 +39,7 @@ export const FALLBACK_PROFILES = {
     role: 'admin',
     title: 'Enterprise IT Administrator',
     description: 'System health monitoring, model fine-tuning orchestration, data pipeline connectivity, and RBAC control.',
-    badge_color: 'cyan',
+    badge_color: 'coral',
     permissions: {
       views: ['dashboard', 'forecasting', 'routing', 'compliance', 'twin', 'telemetry', 'system'],
       actions: ['*']
