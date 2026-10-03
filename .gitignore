@@ -16,7 +16,8 @@ dist/
 dist-ssr/
 *.local
 
-# Environment variables (keep .env.example, keep .env if needed or ignore local overrides)
+# Environment variables
+.env
 .env.local
 
 # Database / Volumes

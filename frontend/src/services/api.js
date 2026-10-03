@@ -49,5 +49,11 @@ export const api = {
     headers: role ? { 'X-Persona-Role': role } : {}
   }),
   getPersonaRoles: () => fetchWithPersona('/persona/roles'),
-  getAdminSystemStatus: () => fetchWithPersona('/admin/system-status')
+  getAdminSystemStatus: () => fetchWithPersona('/admin/system-status'),
+  getForecastingSKUs: () => fetchWithPersona('/forecasting/skus'),
+  getHistoricalDemand: (skuId, days = 30) => fetchWithPersona(`/forecasting/historical/${skuId}?days=${days}`),
+  predictDemand: (payload) => fetchWithPersona('/forecasting/predict', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
 };

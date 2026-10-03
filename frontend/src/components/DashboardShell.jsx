@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { usePersona } from '../context/PersonaContext';
 import { api } from '../services/api';
+import ForecastingTab from './ForecastingTab';
 
 const TABS = [
   { id: 'kpis', label: 'Executive KPIs', icon: BarChart3, viewRequired: 'kpis' },
@@ -313,19 +314,7 @@ export default function DashboardShell() {
             )}
 
             {activeTab === 'forecasting' && (
-              <div className="bright-card p-10 rounded-2xl text-center space-y-4 bg-white border-2 border-slate-200">
-                <div className="w-14 h-14 rounded-2xl bg-orange-100 border border-orange-300 flex items-center justify-center mx-auto text-[#FF5400]">
-                  <TrendingUp className="w-7 h-7 stroke-[2.2]" />
-                </div>
-                <h3 className="text-xl font-extrabold text-slate-900">Demand Forecasting Studio</h3>
-                <p className="text-xs font-medium text-slate-600 max-w-lg mx-auto leading-relaxed">
-                  PyTorch LSTM/GRU sequence predictor with multi-step forecasts, 95% confidence intervals, and exogenous weather/promotions feeds. Ready for Issue 02 integration.
-                </p>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-50 border border-orange-200 text-xs font-bold text-orange-800">
-                  <CheckCircle2 className="w-4 h-4 text-orange-600" />
-                  <span>Authorized for: {profile?.title}</span>
-                </div>
-              </div>
+              <ForecastingTab personaProfile={profile} />
             )}
 
             {activeTab === 'routing' && (

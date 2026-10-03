@@ -4,10 +4,10 @@
 
 **Blocked by:** 01: Core Architecture, Database & Persona Shell
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Western India corridor historical daily sales series, SKU catalog, and exogenous indicators are seeded in database and fallback fixtures.
-- [ ] PyTorch LSTM/GRU demand forecasting engine implemented with multi-horizon sequence inference, quantile residual variance estimation for 95% confidence bands, and safety stock computation.
-- [ ] API endpoint `POST /api/v1/forecasting/predict` accepts SKU ID, horizon days, and exogenous simulation overrides, returning point predictions, lower/upper bounds, and safety stock thresholds.
-- [ ] Frontend `ForecastingTab` provides interactive SKU selectors, horizon buttons (7d/14d/30d), Chart.js multi-line charts with shaded confidence intervals, and KPI cards for average demand, volatility index, and suggested safety stock.
-- [ ] Automated tests assert response schemas, horizon bounds, and strict confidence interval ordering ($lower \le point \le upper$).
+- [x] Western India corridor historical daily sales series, SKU catalog, and exogenous indicators are seeded in database and fallback fixtures.
+- [x] PyTorch LSTM/GRU demand forecasting engine implemented with multi-horizon sequence inference, quantile residual variance estimation for 95% confidence bands, and safety stock computation.
+- [x] API endpoint `POST /api/v1/forecasting/predict` accepts SKU ID, horizon days, and exogenous simulation overrides, returning point predictions, lower/upper bounds, and safety stock thresholds.
+- [x] Frontend `ForecastingTab` provides interactive SKU selectors, horizon buttons (7d/14d/30d), Chart.js multi-line charts with shaded confidence intervals, and KPI cards for average demand, volatility index, and suggested safety stock.
+- [x] Automated tests assert response schemas, horizon bounds, and strict confidence interval ordering ($lower \le point \le upper$).
