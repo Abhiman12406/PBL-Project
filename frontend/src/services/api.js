@@ -16,9 +16,10 @@ export function setStoredPersona(role) {
  */
 async function fetchWithPersona(url, options = {}) {
   const currentRole = getStoredPersona();
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
     'X-Persona-Role': currentRole,
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers || {})
   };
 
@@ -76,6 +77,27 @@ export const api = {
   }),
   clearDisruptions: () => fetchWithPersona('/telemetry/clear-disruptions', {
     method: 'POST'
-  })
+  }),
+  // Trade Compliance & IDP Orchestrator API
+  getComplianceSamples: () => fetchWithPersona('/compliance/samples'),
+  getComplianceSampleDetail: (sampleId) => fetchWithPersona(`/compliance/samples/${encodeURIComponent(sampleId)}`),
+  getHSCatalogue: (query = '') => fetchWithPersona(`/compliance/hs-catalogue${query ? `?q=${encodeURIComponent(query)}` : ''}`),
+  getCustomsRules: () => fetchWithPersona('/compliance/rules'),
+  classifyHSCode: (payload) => fetchWithPersona('/compliance/hs-classify', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
+  parseTradeDocument: (payload) => {
+    if (typeof FormData !== 'undefined' && payload instanceof FormData) {
+      return fetchWithPersona('/compliance/parse-doc', {
+        method: 'POST',
+        body: payload
+      });
+    }
+    return fetchWithPersona('/compliance/parse-doc', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
 };
 

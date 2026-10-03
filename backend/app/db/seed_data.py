@@ -121,35 +121,17 @@ INITIAL_FLEET = [
     }
 ]
 
+from app.engines.compliance_catalogue import HS_CODE_CATALOGUE
+
 INITIAL_HS_CODES = [
     {
-        "hs_code": "8504.40",
-        "description": "Static converters, power supply units and inverters",
-        "category": "Electronics & Electrical Machinery",
-        "tariff_rate_pct": 7.5,
-        "regulatory_restrictions": "BIS certification required for import into India"
-    },
-    {
-        "hs_code": "8471.30",
-        "description": "Portable automatic data processing machines (Laptops/Tablets)",
-        "category": "Information Technology",
-        "tariff_rate_pct": 0.0,
-        "regulatory_restrictions": "Import restricted; Directorate General of Foreign Trade (DGFT) license"
-    },
-    {
-        "hs_code": "3004.90",
-        "description": "Medicaments consisting of mixed or unmixed products for therapeutic uses",
-        "category": "Pharmaceuticals",
-        "tariff_rate_pct": 10.0,
-        "regulatory_restrictions": "Cold chain temperature logs & CDSCO approval required"
-    },
-    {
-        "hs_code": "8708.29",
-        "description": "Parts and accessories of the motor vehicles (Bodies and components)",
-        "category": "Automotive",
-        "tariff_rate_pct": 15.0,
-        "regulatory_restrictions": "Country of Origin Certificate (COO) and standard inspection"
+        "hs_code": it["hs_code"],
+        "description": it["description"],
+        "category": it["category"],
+        "tariff_rate_pct": it["tariff_rate_pct"],
+        "regulatory_restrictions": it.get("regulatory_restrictions", "")
     }
+    for it in HS_CODE_CATALOGUE
 ]
 
 INITIAL_SKUS = [

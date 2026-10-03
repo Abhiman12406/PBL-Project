@@ -4,12 +4,12 @@
 
 **Blocked by:** 01: Core Architecture, Database & Persona Shell
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] International HS Codebook and customs rules catalogue indexed with local transformer embeddings for sub-second semantic retrieval.
-- [ ] Google Gemini client wrapper configured to extract structured JSON entities (shipper, consignee, declared value, line items, origin port, destination port) from uploaded documents or text payloads.
-- [ ] Local RAG engine compares extracted item descriptions against the vector index to return top HS code matches with similarity confidence scores and tariff rates.
-- [ ] Discrepancy validation engine cross-references document declarations against trade regulations to surface compliance risk alerts.
-- [ ] Endpoints `POST /api/v1/compliance/parse-doc` and `POST /api/v1/compliance/hs-classify` handle document analysis and standalone classification.
-- [ ] Frontend `ComplianceTab` provides 1-click sample document buttons (e.g. Clean Electronics BoL, Discrepant Agro Invoice), file drag-and-drop uploader, raw document preview, structured JSON inspector, HS match badges, and highlighted discrepancy alert cards.
-- [ ] Automated tests verify extraction schema fidelity, HS classification accuracy, and compliance flag generation for sample test documents.
+- [x] International HS Codebook and customs rules catalogue indexed with local transformer embeddings for sub-second semantic retrieval.
+- [x] Google Gemini client wrapper configured to extract structured JSON entities (shipper, consignee, declared value, line items, origin port, destination port) from uploaded documents or text payloads.
+- [x] Local RAG engine compares extracted item descriptions against the vector index to return top HS code matches with similarity confidence scores and tariff rates.
+- [x] Discrepancy validation engine cross-references document declarations against trade regulations to surface compliance risk alerts.
+- [x] Endpoints `POST /api/v1/compliance/parse-doc` and `POST /api/v1/compliance/hs-classify` handle document analysis and standalone classification.
+- [x] Frontend `ComplianceTab` provides 1-click sample document buttons (e.g. Clean Electronics BoL, Discrepant Agro Invoice), file drag-and-drop uploader, raw document preview, structured JSON inspector, HS match badges, and highlighted discrepancy alert cards.
+- [x] Automated tests verify extraction schema fidelity, HS classification accuracy, and compliance flag generation for sample test documents.

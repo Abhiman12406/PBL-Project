@@ -17,6 +17,7 @@ import { usePersona } from '../context/PersonaContext';
 import { api } from '../services/api';
 import ForecastingTab from './ForecastingTab';
 import RoutingTab from './RoutingTab';
+import ComplianceTab from './ComplianceTab';
 
 const TABS = [
   { id: 'kpis', label: 'Executive KPIs', icon: BarChart3, viewRequired: 'kpis' },
@@ -321,19 +322,7 @@ export default function DashboardShell() {
             )}
 
             {activeTab === 'compliance' && (
-              <div className="bright-card p-10 rounded-2xl text-center space-y-4 bg-white border-2 border-slate-200">
-                <div className="w-14 h-14 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center mx-auto text-[#FFB703]">
-                  <FileCheck2 className="w-7 h-7 stroke-[2.2]" />
-                </div>
-                <h3 className="text-xl font-extrabold text-slate-900">Trade Compliance & IDP Orchestrator</h3>
-                <p className="text-xs font-medium text-slate-600 max-w-lg mx-auto leading-relaxed">
-                  Local Vector RAG for sub-second Harmonized System (HS) code classification and Google Gemini OCR/IDP extraction for Bills of Lading and Commercial Invoices. Ready for Issue 05.
-                </p>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800">
-                  <CheckCircle2 className="w-4 h-4 text-amber-600" />
-                  <span>Authorized for: {profile?.title}</span>
-                </div>
-              </div>
+              <ComplianceTab />
             )}
 
             {activeTab === 'twin' && (
