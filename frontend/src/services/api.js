@@ -55,5 +55,15 @@ export const api = {
   predictDemand: (payload) => fetchWithPersona('/forecasting/predict', {
     method: 'POST',
     body: JSON.stringify(payload)
+  }),
+  getRoutingFixtures: () => fetchWithPersona('/routing/fixtures'),
+  optimizeRoute: (payload) => fetchWithPersona('/routing/optimize', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
+  assignBackhaul: (payload) => fetchWithPersona('/routing/assign-backhaul', {
+    method: 'POST',
+    body: JSON.stringify(payload)
   })
 };
+

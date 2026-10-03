@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: Core Architecture, Database & Persona Shell
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Corridor road network graph nodes, vehicle profiles, delivery stops, and available backhaul freight listings seeded in database and fallback fixtures.
-- [ ] PyTorch DRL / graph route solver calculates optimal stop visit orders, estimated fuel burn, CO2 emissions, and ETA per stop under standard and congested traffic modes.
-- [ ] Freight matching engine identifies compatible return-leg cargo requests matching truck capacity and route geometry.
-- [ ] API endpoint `POST /api/v1/routing/optimize` accepts vehicle specs, delivery stops, and traffic mode, returning route geometry, turn-by-turn waypoints, metrics, and matched freight backhauls.
-- [ ] Frontend `RoutingTab` renders an interactive Leaflet.js map with route polyline, depot/customer stop markers, turn-by-turn waypoint table, vehicle payload utilization bar, and a Backhaul Freight Matching card with 1-click assignment.
-- [ ] Automated tests verify vehicle capacity adherence, valid waypoint sequencing, and backhaul pairing compatibility.
+- [x] Corridor road network graph nodes, vehicle profiles, delivery stops, and available backhaul freight listings seeded in database and fallback fixtures.
+- [x] PyTorch DRL / graph route solver calculates optimal stop visit orders, estimated fuel burn, CO2 emissions, and ETA per stop under standard and congested traffic modes.
+- [x] Freight matching engine identifies compatible return-leg cargo requests matching truck capacity and route geometry.
+- [x] API endpoint `POST /api/v1/routing/optimize` accepts vehicle specs, delivery stops, and traffic mode, returning route geometry, turn-by-turn waypoints, metrics, and matched freight backhauls.
+- [x] Frontend `RoutingTab` renders an interactive Leaflet.js map with route polyline, depot/customer stop markers, turn-by-turn waypoint table, vehicle payload utilization bar, and a Backhaul Freight Matching card with 1-click assignment.
+- [x] Automated tests verify vehicle capacity adherence, valid waypoint sequencing, and backhaul pairing compatibility.

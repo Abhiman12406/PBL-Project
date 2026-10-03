@@ -11,7 +11,10 @@ from app.db.models import (
     HSCodeItem,
     InventorySKU,
     HistoricalDailySale,
-    ExogenousIndicator
+    ExogenousIndicator,
+    RoadNetworkNode,
+    DeliveryOrder,
+    FreightBackhaul
 )
 
 logger = logging.getLogger(__name__)
@@ -298,10 +301,308 @@ def generate_seed_exogenous_indicators(days: int = 90) -> List[Dict[str, Any]]:
     return indicators
 
 
+# Corridor Road Network Graph Nodes for Western India
+CORRIDOR_ROAD_NODES = [
+    {
+        "node_id": "NODE-JNPT",
+        "name": "JNPT Port Container Terminal Gateway",
+        "city": "Navi Mumbai",
+        "latitude": 18.9496,
+        "longitude": 72.9515,
+        "highway": "NH-348",
+        "is_ghat_pass": False,
+        "congestion_index": 1.2
+    },
+    {
+        "node_id": "NODE-MUM-CTR",
+        "name": "Mumbai Central Freight Junction",
+        "city": "Mumbai",
+        "latitude": 19.0760,
+        "longitude": 72.8777,
+        "highway": "Eastern Express Hwy",
+        "is_ghat_pass": False,
+        "congestion_index": 1.6
+    },
+    {
+        "node_id": "NODE-THN-MAJ",
+        "name": "Thane Majiwada Golden Triangle",
+        "city": "Thane",
+        "latitude": 19.2183,
+        "longitude": 72.9781,
+        "highway": "NH-48",
+        "is_ghat_pass": False,
+        "congestion_index": 1.8
+    },
+    {
+        "node_id": "NODE-BHW-LOG",
+        "name": "Bhiwandi Integrated Logistics Hub",
+        "city": "Bhiwandi",
+        "latitude": 19.2967,
+        "longitude": 73.0631,
+        "highway": "NH-160",
+        "is_ghat_pass": False,
+        "congestion_index": 1.5
+    },
+    {
+        "node_id": "NODE-KSR-GHT",
+        "name": "Kasara Ghat / Thal Pass Summit",
+        "city": "Igatpuri",
+        "latitude": 19.6967,
+        "longitude": 73.5611,
+        "highway": "NH-160",
+        "is_ghat_pass": True,
+        "congestion_index": 2.1
+    },
+    {
+        "node_id": "NODE-NSK-AMB",
+        "name": "Nashik Ambad Industrial Interchange",
+        "city": "Nashik",
+        "latitude": 19.9975,
+        "longitude": 73.7898,
+        "highway": "NH-160",
+        "is_ghat_pass": False,
+        "congestion_index": 1.1
+    },
+    {
+        "node_id": "NODE-PNV-EXP",
+        "name": "Panvel Expressway Gateway",
+        "city": "Panvel",
+        "latitude": 18.9894,
+        "longitude": 73.1175,
+        "highway": "Mumbai-Pune Exp",
+        "is_ghat_pass": False,
+        "congestion_index": 1.4
+    },
+    {
+        "node_id": "NODE-LNV-GHT",
+        "name": "Lonavala Khandala Bhor Ghat Summit",
+        "city": "Lonavala",
+        "latitude": 18.7557,
+        "longitude": 73.4091,
+        "highway": "Mumbai-Pune Exp",
+        "is_ghat_pass": True,
+        "congestion_index": 1.9
+    },
+    {
+        "node_id": "NODE-PUN-CHK",
+        "name": "Pune Chakan Heavy Auto Belt",
+        "city": "Pune",
+        "latitude": 18.7606,
+        "longitude": 73.8611,
+        "highway": "NH-60",
+        "is_ghat_pass": False,
+        "congestion_index": 1.3
+    },
+    {
+        "node_id": "NODE-PUN-FC",
+        "name": "Pune Central Fulfillment Interchange",
+        "city": "Pune",
+        "latitude": 18.5204,
+        "longitude": 73.8567,
+        "highway": "NH-48",
+        "is_ghat_pass": False,
+        "congestion_index": 1.5
+    }
+]
+
+# Initial candidate delivery orders across Western India corridor
+INITIAL_DELIVERY_ORDERS = [
+    {
+        "delivery_id": "DEL-THN-01",
+        "customer_name": "Godrej & Boyce Industrial Consignment",
+        "city": "Thane",
+        "address": "Eastern Express Hwy, Majiwada, Thane",
+        "latitude": 19.2183,
+        "longitude": 72.9781,
+        "weight_kg": 4200.0,
+        "volume_m3": 14.0,
+        "time_window_start": "2026-10-04T08:00:00Z",
+        "time_window_end": "2026-10-04T12:00:00Z",
+        "priority": "HIGH",
+        "status": "PENDING"
+    },
+    {
+        "delivery_id": "DEL-BHW-02",
+        "customer_name": "Flipkart & Amazon E-Commerce Bulk Inbound",
+        "city": "Bhiwandi",
+        "address": "Mankoli - Anjurphata Link Rd, Bhiwandi",
+        "latitude": 19.2967,
+        "longitude": 73.0631,
+        "weight_kg": 3800.0,
+        "volume_m3": 18.5,
+        "time_window_start": "2026-10-04T09:30:00Z",
+        "time_window_end": "2026-10-04T13:30:00Z",
+        "priority": "MEDIUM",
+        "status": "PENDING"
+    },
+    {
+        "delivery_id": "DEL-NSK-01",
+        "customer_name": "Mahindra & Mahindra Agro Machinery",
+        "city": "Nashik",
+        "address": "Satpur Industrial Estate, Nashik",
+        "latitude": 19.9975,
+        "longitude": 73.7898,
+        "weight_kg": 5000.0,
+        "volume_m3": 16.0,
+        "time_window_start": "2026-10-04T11:00:00Z",
+        "time_window_end": "2026-10-04T16:00:00Z",
+        "priority": "HIGH",
+        "status": "PENDING"
+    },
+    {
+        "delivery_id": "DEL-NSK-02",
+        "customer_name": "Bosch Automotive Ancillary Feeder",
+        "city": "Nashik",
+        "address": "Ambad MIDC Industrial Cluster, Nashik",
+        "latitude": 20.0125,
+        "longitude": 73.7420,
+        "weight_kg": 6500.0,
+        "volume_m3": 21.0,
+        "time_window_start": "2026-10-04T12:00:00Z",
+        "time_window_end": "2026-10-04T17:00:00Z",
+        "priority": "HIGH",
+        "status": "PENDING"
+    },
+    {
+        "delivery_id": "DEL-PUN-01",
+        "customer_name": "Tata Motors CV Assembly Plant",
+        "city": "Pune",
+        "address": "MIDC Phase 2, Chakan, Pune",
+        "latitude": 18.7606,
+        "longitude": 73.8611,
+        "weight_kg": 4800.0,
+        "volume_m3": 15.0,
+        "time_window_start": "2026-10-04T10:00:00Z",
+        "time_window_end": "2026-10-04T15:00:00Z",
+        "priority": "HIGH",
+        "status": "PENDING"
+    },
+    {
+        "delivery_id": "DEL-PUN-02",
+        "customer_name": "Infosys / Wipro Tech Data Centre Replacements",
+        "city": "Pune",
+        "address": "Phase 1 Hinjewadi Infotech Park, Pune",
+        "latitude": 18.5913,
+        "longitude": 73.7389,
+        "weight_kg": 2900.0,
+        "volume_m3": 9.5,
+        "time_window_start": "2026-10-04T11:30:00Z",
+        "time_window_end": "2026-10-04T16:30:00Z",
+        "priority": "MEDIUM",
+        "status": "PENDING"
+    },
+    {
+        "delivery_id": "DEL-MUM-01",
+        "customer_name": "Cipla Critical Pharma Hub",
+        "city": "Mumbai",
+        "address": "MIDC Central Road, Andheri East, Mumbai",
+        "latitude": 19.1136,
+        "longitude": 72.8697,
+        "weight_kg": 1800.0,
+        "volume_m3": 6.0,
+        "time_window_start": "2026-10-04T08:30:00Z",
+        "time_window_end": "2026-10-04T12:30:00Z",
+        "priority": "HIGH",
+        "status": "PENDING"
+    }
+]
+
+# Backhaul Freight Postings for Return Legs (eliminating empty kilometers)
+INITIAL_BACKHAULS = [
+    {
+        "backhaul_id": "BHL-NSK-JNPT-01",
+        "shipper_name": "Sahyadri Farmers Producer Co. & Wine Exporters",
+        "origin_city": "Nashik",
+        "origin_latitude": 19.9975,
+        "origin_longitude": 73.7898,
+        "destination_city": "Navi Mumbai (JNPT)",
+        "destination_latitude": 18.9496,
+        "destination_longitude": 72.9515,
+        "cargo_type": "Export Table Grapes & Sula Wine Casks (Reefer)",
+        "cargo_weight_kg": 5200.0,
+        "volume_m3": 18.0,
+        "payout_inr": 28500.0,
+        "available_window_start": "2026-10-04T15:00:00Z",
+        "available_window_end": "2026-10-04T22:00:00Z",
+        "status": "AVAILABLE"
+    },
+    {
+        "backhaul_id": "BHL-NSK-MUM-02",
+        "shipper_name": "Nashik Organic Agricultural Syndicate",
+        "origin_city": "Nashik",
+        "origin_latitude": 19.9975,
+        "origin_longitude": 73.7898,
+        "destination_city": "Mumbai Central",
+        "destination_latitude": 19.0760,
+        "destination_longitude": 72.8777,
+        "cargo_type": "Fresh High-Altitude Vegetables & Dairy",
+        "cargo_weight_kg": 3800.0,
+        "volume_m3": 12.0,
+        "payout_inr": 19800.0,
+        "available_window_start": "2026-10-04T14:30:00Z",
+        "available_window_end": "2026-10-04T21:00:00Z",
+        "status": "AVAILABLE"
+    },
+    {
+        "backhaul_id": "BHL-PUN-JNPT-03",
+        "shipper_name": "Bharat Forge Global Transmission Exports",
+        "origin_city": "Pune",
+        "origin_latitude": 18.7606,
+        "origin_longitude": 73.8611,
+        "destination_city": "Navi Mumbai (JNPT)",
+        "destination_latitude": 18.9496,
+        "destination_longitude": 72.9515,
+        "cargo_type": "Machined Heavy Axles & Export Gearboxes",
+        "cargo_weight_kg": 7400.0,
+        "volume_m3": 14.5,
+        "payout_inr": 36000.0,
+        "available_window_start": "2026-10-04T16:00:00Z",
+        "available_window_end": "2026-10-04T23:00:00Z",
+        "status": "AVAILABLE"
+    },
+    {
+        "backhaul_id": "BHL-PUN-THN-04",
+        "shipper_name": "Tata Autocomp Sensor Systems",
+        "origin_city": "Pune",
+        "origin_latitude": 18.5204,
+        "origin_longitude": 73.8567,
+        "destination_city": "Thane",
+        "destination_latitude": 19.2183,
+        "destination_longitude": 72.9781,
+        "cargo_type": "Electric Vehicle Wiring Harnesses & Sensors",
+        "cargo_weight_kg": 3100.0,
+        "volume_m3": 10.0,
+        "payout_inr": 21500.0,
+        "available_window_start": "2026-10-04T15:00:00Z",
+        "available_window_end": "2026-10-04T20:30:00Z",
+        "status": "AVAILABLE"
+    },
+    {
+        "backhaul_id": "BHL-THN-JNPT-05",
+        "shipper_name": "APM Terminals Intermodal Logistics",
+        "origin_city": "Thane",
+        "origin_latitude": 19.2183,
+        "origin_longitude": 72.9781,
+        "destination_city": "Navi Mumbai (JNPT)",
+        "destination_latitude": 18.9496,
+        "destination_longitude": 72.9515,
+        "cargo_type": "Container Spare Hardware & Maritime Rigging",
+        "cargo_weight_kg": 4600.0,
+        "volume_m3": 11.0,
+        "payout_inr": 16200.0,
+        "available_window_start": "2026-10-04T13:00:00Z",
+        "available_window_end": "2026-10-04T18:00:00Z",
+        "status": "AVAILABLE"
+    }
+]
+
 # Cached fallback fixtures accessible in memory
 FALLBACK_SKUS = INITIAL_SKUS
 FALLBACK_HISTORICAL_SALES = generate_seed_historical_sales(INITIAL_SKUS, days=90)
 FALLBACK_EXOGENOUS = generate_seed_exogenous_indicators(days=90)
+FALLBACK_ROAD_NODES = CORRIDOR_ROAD_NODES
+FALLBACK_DELIVERY_ORDERS = INITIAL_DELIVERY_ORDERS
+FALLBACK_BACKHAULS = INITIAL_BACKHAULS
 
 
 def seed_initial_data(db: Session = None):
@@ -346,6 +647,21 @@ def seed_initial_data(db: Session = None):
             for exo_data in FALLBACK_EXOGENOUS:
                 db.add(ExogenousIndicator(**exo_data))
 
+        if db.query(RoadNetworkNode).first() is None:
+            logger.info("Seeding road network graph nodes...")
+            for road_data in CORRIDOR_ROAD_NODES:
+                db.add(RoadNetworkNode(**road_data))
+
+        if db.query(DeliveryOrder).first() is None:
+            logger.info("Seeding candidate delivery orders...")
+            for del_data in INITIAL_DELIVERY_ORDERS:
+                db.add(DeliveryOrder(**del_data))
+
+        if db.query(FreightBackhaul).first() is None:
+            logger.info("Seeding return backhaul freight listings...")
+            for bhl_data in INITIAL_BACKHAULS:
+                db.add(FreightBackhaul(**bhl_data))
+
         db.commit()
         logger.info("Seed data successfully committed.")
     except Exception as e:
@@ -354,3 +670,4 @@ def seed_initial_data(db: Session = None):
     finally:
         if owns_session:
             db.close()
+

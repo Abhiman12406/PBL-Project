@@ -11,13 +11,12 @@ import {
   ArrowRight, 
   CheckCircle2, 
   AlertTriangle,
-  PlayCircle,
-  Terminal,
-  Zap
+  Terminal
 } from 'lucide-react';
 import { usePersona } from '../context/PersonaContext';
 import { api } from '../services/api';
 import ForecastingTab from './ForecastingTab';
+import RoutingTab from './RoutingTab';
 
 const TABS = [
   { id: 'kpis', label: 'Executive KPIs', icon: BarChart3, viewRequired: 'kpis' },
@@ -29,7 +28,7 @@ const TABS = [
 ];
 
 export default function DashboardShell() {
-  const { currentRole, profile, canView, canPerform, switchPersona } = usePersona();
+  const { currentRole, profile, canView, switchPersona } = usePersona();
   const [activeTab, setActiveTab] = useState('kpis');
   const [adminOutput, setAdminOutput] = useState(null);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -318,19 +317,7 @@ export default function DashboardShell() {
             )}
 
             {activeTab === 'routing' && (
-              <div className="bright-card p-10 rounded-2xl text-center space-y-4 bg-white border-2 border-slate-200">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-100 border border-emerald-300 flex items-center justify-center mx-auto text-[#00C853]">
-                  <Truck className="w-7 h-7 stroke-[2.2]" />
-                </div>
-                <h3 className="text-xl font-extrabold text-slate-900">Route & Fleet Optimizer</h3>
-                <p className="text-xs font-medium text-slate-600 max-w-lg mx-auto leading-relaxed">
-                  Deep Reinforcement Learning (DRL) Vehicle Routing Problem agent with dynamic traffic penalties and backhaul freight matching along the Mumbai–Nashik corridor. Ready for Issue 03.
-                </p>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Authorized for: {profile?.title}</span>
-                </div>
-              </div>
+              <RoutingTab />
             )}
 
             {activeTab === 'compliance' && (

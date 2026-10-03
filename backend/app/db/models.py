@@ -89,3 +89,57 @@ class ExogenousIndicator(Base):
     promo_campaign_active = Column(Boolean, nullable=False, default=False)
     notes = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class RoadNetworkNode(Base):
+    __tablename__ = "road_network_nodes"
+
+    node_id = Column(String(50), primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    city = Column(String(50), nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    highway = Column(String(50), nullable=False, default="NH-48")
+    is_ghat_pass = Column(Boolean, nullable=False, default=False)
+    congestion_index = Column(Float, nullable=False, default=1.0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class DeliveryOrder(Base):
+    __tablename__ = "delivery_orders"
+
+    delivery_id = Column(String(50), primary_key=True, index=True)
+    customer_name = Column(String(100), nullable=False)
+    city = Column(String(50), nullable=False)
+    address = Column(String(255), nullable=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    weight_kg = Column(Float, nullable=False)
+    volume_m3 = Column(Float, nullable=False, default=10.0)
+    time_window_start = Column(String(30), nullable=False)
+    time_window_end = Column(String(30), nullable=False)
+    priority = Column(String(20), nullable=False, default="HIGH")
+    status = Column(String(20), nullable=False, default="PENDING")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class FreightBackhaul(Base):
+    __tablename__ = "freight_backhauls"
+
+    backhaul_id = Column(String(50), primary_key=True, index=True)
+    shipper_name = Column(String(100), nullable=False)
+    origin_city = Column(String(50), nullable=False)
+    origin_latitude = Column(Float, nullable=False)
+    origin_longitude = Column(Float, nullable=False)
+    destination_city = Column(String(50), nullable=False)
+    destination_latitude = Column(Float, nullable=False)
+    destination_longitude = Column(Float, nullable=False)
+    cargo_type = Column(String(100), nullable=False)
+    cargo_weight_kg = Column(Float, nullable=False)
+    volume_m3 = Column(Float, nullable=False, default=12.0)
+    payout_inr = Column(Float, nullable=False)
+    available_window_start = Column(String(30), nullable=False)
+    available_window_end = Column(String(30), nullable=False)
+    status = Column(String(20), nullable=False, default="AVAILABLE")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
