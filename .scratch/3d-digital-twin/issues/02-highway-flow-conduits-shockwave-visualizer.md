@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: Cesium 3D Cyber-Geospatial Viewport & WGS84 Facility Beacons
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Highway network polylines are draped accurately over 3D terrain for all inter-node corridors (JNPT-Bhiwandi, Bhiwandi-Thane, NH-160 Kasara Ghat, Mumbai-Pune Expressway).
-- [ ] Highway conduits feature animated directional particle pulse materials representing freight flow velocity and volume.
-- [ ] Backend topology service delivers detailed corridor geometry, congestion indices, and alternative bypass metadata.
-- [ ] Active disruptions trigger pulsating volumetric 3D shockwave ellipsoids at epicenter coordinates (e.g., Kasara Ghat landslide or port closure).
-- [ ] Disrupted corridors dynamically transition to a pulsating red dashed hazard aesthetic, while alternative bypass corridors (Malshej Ghat NH-61, Ghodbunder Connector, Dighi Rail Feeder) illuminate in glowing cyan/emerald.
-- [ ] Automated tests verify corridor link geometry structures, shockwave coordinate payloads, and bypass pairing compatibility.
+- [x] Highway network polylines are draped accurately over 3D terrain for all inter-node corridors (JNPT-Bhiwandi, Bhiwandi-Thane, NH-160 Kasara Ghat, Mumbai-Pune Expressway).
+- [x] Highway conduits feature animated directional particle pulse materials representing freight flow velocity and volume.
+- [x] Backend topology service delivers detailed corridor geometry, congestion indices, and alternative bypass metadata.
+- [x] Active disruptions trigger pulsating volumetric 3D shockwave ellipsoids at epicenter coordinates (e.g., Kasara Ghat landslide or port closure).
+- [x] Disrupted corridors dynamically transition to a pulsating red dashed hazard aesthetic, while alternative bypass corridors (Malshej Ghat NH-61, Ghodbunder Connector, Dighi Rail Feeder) illuminate in glowing cyan/emerald.
+- [x] Automated tests verify corridor link geometry structures, shockwave coordinate payloads, and bypass pairing compatibility.

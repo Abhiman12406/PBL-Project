@@ -2,14 +2,15 @@
  * logisticsTopology.js
  * 
  * Authoritative WGS84 geospatial topology definitions for the Western India Logistics Corridor.
- * Includes nodes (JNPT, Bhiwandi, Thane, Nashik, Pune), camera presets, and stock capacity threshold logic.
+ * Includes nodes (JNPT, Bhiwandi, Thane, Nashik, Pune), highway corridors, bypass routes,
+ * scenario disruption epicenters, camera presets, and stock capacity threshold logic.
  */
 
 export const CORRIDOR_BOUNDS = {
   minLat: 18.0,
   maxLat: 20.5,
   minLon: 72.5,
-  maxLon: 74.2
+  maxLon: 74.35
 };
 
 export const FACILITY_NODES = [
@@ -150,6 +151,192 @@ export const FACILITY_NODES = [
   }
 ];
 
+export const HIGHWAY_CORRIDORS = [
+  {
+    link_id: 'LINK-JNPT-BHW',
+    source: 'PORT-JNPT-01',
+    target: 'DC-BHW-01',
+    corridor_name: 'JNPT-Bhiwandi Freight Expressway',
+    highway_code: 'NH-348 / NH-48',
+    distance_km: 64.5,
+    nominal_transit_hours: 3.0,
+    nominal_congestion: 18.5,
+    capacity_trucks_per_day: 350,
+    epicenter_coordinates: [18.9496, 72.9515],
+    geometry: [
+      [18.9496, 72.9515], // JNPT Port
+      [18.9720, 72.9800], // Uran Bypass
+      [19.0050, 73.0150], // Belapur CBD
+      [19.0400, 72.9500], // Vashi Creek Bridge
+      [19.1200, 72.9100], // Ghatkopar / Eastern Express
+      [19.1750, 72.9500], // Mulund Check Naka
+      [19.2183, 72.9781], // Thane Majhiwada
+      [19.2550, 73.0100], // Kalwa
+      [19.2967, 73.0631]  // Bhiwandi Central DC
+    ],
+    alternative_route: {
+      name: 'Dighi / Coastal Rail Feeder Bypass',
+      distance_km: 88.0,
+      transit_hours: 4.8,
+      description: 'Coastal freight rail bypass routing directly into Navi Mumbai dry terminals.',
+      geometry: [
+        [18.9496, 72.9515], // JNPT
+        [18.8800, 72.9700], // Dighi feeder rail junction
+        [18.9200, 73.0300], // Panvel Rail Logistics Siding
+        [19.0800, 73.0900], // Taloja Industrial Feeder
+        [19.1800, 73.1200], // Dombivli East Bypass
+        [19.2967, 73.0631]  // Bhiwandi Central DC
+      ]
+    }
+  },
+  {
+    link_id: 'LINK-BHW-THN',
+    source: 'DC-BHW-01',
+    target: 'HUB-THN-01',
+    corridor_name: 'Bhiwandi-Thane Urban Spur',
+    highway_code: 'Old Agra Road / SH-40',
+    distance_km: 22.0,
+    nominal_transit_hours: 1.5,
+    nominal_congestion: 22.0,
+    capacity_trucks_per_day: 200,
+    epicenter_coordinates: [19.2550, 73.0200],
+    geometry: [
+      [19.2967, 73.0631], // Bhiwandi Central DC
+      [19.2700, 73.0400], // Anjurphata
+      [19.2450, 73.0100], // Balkum
+      [19.2183, 72.9781]  // Thane Regional Hub
+    ],
+    alternative_route: {
+      name: 'Ghodbunder Road Express Connector',
+      distance_km: 31.0,
+      transit_hours: 2.2,
+      description: 'Peripheral arterial ring bypass skirting central municipal bottlenecks.',
+      geometry: [
+        [19.2967, 73.0631], // Bhiwandi Central DC
+        [19.3200, 73.0100], // Kaman Bypass
+        [19.2800, 72.9300], // Ghodbunder Road
+        [19.2300, 72.9500], // Ovala
+        [19.2183, 72.9781]  // Thane Regional Hub
+      ]
+    }
+  },
+  {
+    link_id: 'LINK-BHW-NSK',
+    source: 'DC-BHW-01',
+    target: 'DEP-NSK-01',
+    corridor_name: 'NH-160 Kasara Ghat Corridor',
+    highway_code: 'NH-160',
+    distance_km: 142.0,
+    nominal_transit_hours: 4.5,
+    nominal_congestion: 25.0,
+    capacity_trucks_per_day: 180,
+    epicenter_coordinates: [19.6967, 73.5611],
+    geometry: [
+      [19.2967, 73.0631], // Bhiwandi Central DC
+      [19.3800, 73.1600], // Padgha Toll Plaza
+      [19.4600, 73.2800], // Asangaon
+      [19.5500, 73.4000], // Shahapur
+      [19.6400, 73.5000], // Kasara Base
+      [19.6967, 73.5611], // Kasara Ghat / Igatpuri Pass (Mudslide Epicenter)
+      [19.7500, 73.6100], // Igatpuri Toll Plaza
+      [19.8500, 73.6900], // Ghoti
+      [19.9200, 73.7400], // Sinnar Phata
+      [19.9975, 73.7898]  // Nashik Agro Depot
+    ],
+    alternative_route: {
+      name: 'NH-61 via Malshej Ghat / SH-44 Feeder Bypass',
+      distance_km: 195.0,
+      transit_hours: 6.8,
+      description: 'All-weather southern mountain pass bypass maintaining freight continuity when Kasara Ghat is closed.',
+      geometry: [
+        [19.2967, 73.0631], // Bhiwandi Central DC
+        [19.2437, 73.1355], // Kalyan East Bypass
+        [19.2500, 73.4000], // Murbad
+        [19.3400, 73.7700], // Malshej Ghat Crest Pass
+        [19.2600, 73.9800], // Otur
+        [19.1800, 74.1200], // Alephata Junction
+        [19.5700, 74.2100], // Sangamner Highway
+        [19.8400, 73.9900], // Sinnar MIDC
+        [19.9975, 73.7898]  // Nashik Agro Depot
+      ]
+    }
+  },
+  {
+    link_id: 'LINK-BHW-PUN',
+    source: 'DC-BHW-01',
+    target: 'FC-PUN-01',
+    corridor_name: 'Mumbai-Pune Expressway Viaduct Corridor',
+    highway_code: 'Yashwantrao Chavan Expressway',
+    distance_km: 158.0,
+    nominal_transit_hours: 4.0,
+    nominal_congestion: 20.0,
+    capacity_trucks_per_day: 260,
+    epicenter_coordinates: [18.7557, 73.4091],
+    geometry: [
+      [19.2967, 73.0631], // Bhiwandi Central DC
+      [19.2183, 72.9781], // Thane
+      [19.1000, 73.0100], // Navi Mumbai
+      [18.9894, 73.1175], // Panvel Expressway Entry
+      [18.9200, 73.2200], // Khalapur Toll Plaza
+      [18.8400, 73.3100], // Khopoli
+      [18.7557, 73.4091], // Lonavala / Khandala Bhor Ghat (Bridge Fracture Epicenter)
+      [18.7100, 73.5500], // Talegaon Dabhade
+      [18.6600, 73.6800], // Dehu Road
+      [18.5913, 73.7389], // Hinjewadi IT Park
+      [18.5204, 73.8567]  // Pune Auto Fulfillment Center
+    ],
+    alternative_route: {
+      name: 'Old NH-48 Highway + Khopoli/Tamhini Secondary Bypass',
+      distance_km: 178.0,
+      transit_hours: 5.8,
+      description: 'Parallel national highway alignment with dedicated night freight convoy windows.',
+      geometry: [
+        [19.2967, 73.0631], // Bhiwandi Central DC
+        [19.1500, 73.1200], // Taloja Bypass
+        [18.9894, 73.1175], // Panvel Old Highway
+        [18.8800, 73.2800], // Chowk Old NH-48
+        [18.7800, 73.3500], // Bhor Ghat Old Highway Alignment
+        [18.7400, 73.4500], // Kamshet Bypass
+        [18.6500, 73.6000], // Somatane Phata
+        [18.5204, 73.8567]  // Pune Auto Fulfillment Center
+      ]
+    }
+  }
+];
+
+export const SCENARIO_EPICENTERS = {
+  port_strike: {
+    id: 'port_strike',
+    name: 'JNPT Port Container Terminal Gate',
+    latitude: 18.9496,
+    longitude: 72.9515,
+    radius_meters: 3200,
+    hazard_type: 'Labor Strike Gate Blockade',
+    affected_links: ['LINK-JNPT-BHW'],
+    bypass_corridor_id: 'LINK-JNPT-BHW'
+  },
+  monsoon_closures: {
+    id: 'monsoon_closures',
+    name: 'Kasara Ghat NH-160 Mudslide Epicenter',
+    latitude: 19.6967,
+    longitude: 73.5611,
+    radius_meters: 4500,
+    hazard_type: 'Extreme Torrential Mudslide',
+    affected_links: ['LINK-BHW-NSK'],
+    bypass_corridor_id: 'LINK-BHW-NSK'
+  },
+  bridge_failure: {
+    id: 'bridge_failure',
+    name: 'Khandala Expressway Viaduct Pier Fracture',
+    latitude: 18.7557,
+    longitude: 73.4091,
+    radius_meters: 3800,
+    hazard_type: 'Structural Pier Fracture',
+    affected_links: ['LINK-BHW-PUN'],
+    bypass_corridor_id: 'LINK-BHW-PUN'
+  }
+};
+
 export const CAMERA_PRESETS = {
   CORRIDOR_OVERVIEW: {
     id: 'CORRIDOR_OVERVIEW',
@@ -234,6 +421,65 @@ export function validateNodeSchema(node) {
   }
   if (!node.cameraPreset || typeof node.cameraPreset.height !== 'number') {
     errors.push('Missing camera preset');
+  }
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Validates highway corridor link schema compliance.
+ */
+export function validateLinkSchema(link) {
+  const errors = [];
+  if (!link.link_id || typeof link.link_id !== 'string') errors.push('Missing or invalid link_id');
+  if (!link.source || typeof link.source !== 'string') errors.push('Missing or invalid source');
+  if (!link.target || typeof link.target !== 'string') errors.push('Missing or invalid target');
+  if (typeof link.distance_km !== 'number' || link.distance_km <= 0) {
+    errors.push('Distance must be a positive number');
+  }
+  if (!Array.isArray(link.geometry) || link.geometry.length < 2) {
+    errors.push('Geometry must contain at least 2 coordinate points');
+  } else {
+    for (let i = 0; i < link.geometry.length; i++) {
+      const pt = link.geometry[i];
+      if (!Array.isArray(pt) || pt.length < 2 || typeof pt[0] !== 'number' || typeof pt[1] !== 'number') {
+        errors.push(`Invalid point at index ${i} in link ${link.link_id}`);
+        break;
+      }
+    }
+  }
+
+  if (link.alternative_route) {
+    const alt = link.alternative_route;
+    if (!alt.name || typeof alt.name !== 'string') errors.push('Alternative route missing name');
+    if (typeof alt.distance_km !== 'number' || alt.distance_km <= 0) errors.push('Alternative route distance invalid');
+    if (!Array.isArray(alt.geometry) || alt.geometry.length < 2) {
+      errors.push('Alternative route geometry must contain at least 2 coordinate points');
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Validates shockwave epicenter schema compliance.
+ */
+export function validateEpicenterSchema(epicenter) {
+  const errors = [];
+  if (!epicenter.name || typeof epicenter.name !== 'string') errors.push('Missing or invalid epicenter name');
+  if (typeof epicenter.latitude !== 'number' || epicenter.latitude < -90 || epicenter.latitude > 90) {
+    errors.push('Epicenter latitude out of range');
+  }
+  if (typeof epicenter.longitude !== 'number' || epicenter.longitude < -180 || epicenter.longitude > 180) {
+    errors.push('Epicenter longitude out of range');
+  }
+  if (typeof epicenter.radius_meters !== 'number' || epicenter.radius_meters <= 0) {
+    errors.push('Radius meters must be a positive number');
   }
   return {
     valid: errors.length === 0,

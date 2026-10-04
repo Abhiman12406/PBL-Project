@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import {
@@ -16,15 +16,22 @@ import {
   ShieldCheck,
   AlertTriangle,
   ExternalLink,
-  RotateCcw
+  RotateCcw,
+  Zap,
+  Route,
+  Activity,
+  Flame,
+  Radio
 } from 'lucide-react';
 import {
   FACILITY_NODES,
+  HIGHWAY_CORRIDORS,
+  SCENARIO_EPICENTERS,
   CAMERA_PRESETS,
   getStockCapacityStatus
 } from '../constants/logisticsTopology';
 
-// Helper to create an SVG icon data URL for billboards
+// Helper to create an SVG icon data URL for facility billboards
 function createPinIconSvg(tierNumber, statusColor) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
     <defs>
@@ -40,10 +47,23 @@ function createPinIconSvg(tierNumber, statusColor) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+// Helper to create hazard epicenter icon
+function createHazardIconSvg() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+    <polygon points="28,6 50,46 6,46" fill="#ef4444" stroke="#ffffff" stroke-width="3"/>
+    <text x="28" y="40" font-family="system-ui, sans-serif" font-size="22" font-weight="900" fill="#ffffff" text-anchor="middle">!</text>
+  </svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 export default function CesiumTwinViewport({
   selectedNodeId = 'DC-BHW-01',
   onSelectNode = () => {},
   simulationNodes = null,
+  simulationLinks = null,
+  activeScenarioId = 'port_strike',
+  shockIntensity = 75,
+  enableMitigation = true,
   height = '580px',
   className = ''
 }) {
@@ -51,10 +71,14 @@ export default function CesiumTwinViewport({
   const creditContainerRef = useRef(null);
   const viewerRef = useRef(null);
   const entitiesMapRef = useRef(new Map());
+  const corridorEntitiesRef = useRef([]);
+  const shockwaveEntitiesRef = useRef([]);
   const osmBuildingsTilesetRef = useRef(null);
 
   const [activePreset, setActivePreset] = useState('CORRIDOR_OVERVIEW');
   const [showBuildings, setShowBuildings] = useState(true);
+  const [showFlowConduits, setShowFlowConduits] = useState(true);
+  const [showShockwaves, setShowShockwaves] = useState(true);
   const [tokenMissing, setTokenMissing] = useState(false);
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [hoveredNode, setHoveredNode] = useState(null);
@@ -62,7 +86,7 @@ export default function CesiumTwinViewport({
   // Check Ion token
   const ionToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
 
-  // Initialize Cesium Viewer
+  // 1. Initialize Cesium Viewer
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -98,7 +122,7 @@ export default function CesiumTwinViewport({
       const scene = viewer.scene;
       scene.globe.depthTestAgainstTerrain = true;
       scene.skyAtmosphere.show = true;
-      scene.globe.enableLighting = false; // Steady day lighting for operational clarity
+      scene.globe.enableLighting = false; // Steady day lighting for logistics operational clarity
 
       // Attempt to load Cesium World Terrain asynchronously
       if (ionToken) {
@@ -184,7 +208,7 @@ export default function CesiumTwinViewport({
     };
   }, [ionToken]);
 
-  // Synchronize 3D Facility Entities (Beacons, Rings, Billboards)
+  // 2. Synchronize 3D Facility Entities (Beacons, Rings, Billboards)
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed() || !isViewerReady) return;
@@ -237,7 +261,7 @@ export default function CesiumTwinViewport({
           outlineColor: entityColor.withAlpha(0.95),
           outlineWidth: 3,
           height: 10,
-          extrudedHeight: 45 // 3D volume
+          extrudedHeight: 45
         }
       });
       stockRing._nodeId = node.node_id;
@@ -365,6 +389,260 @@ export default function CesiumTwinViewport({
     });
   }, [isViewerReady, selectedNodeId, simulationNodes]);
 
+  // 3. Synchronize 3D Highway Flow Conduits & Alternative Bypass Corridors
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed() || !isViewerReady) return;
+
+    // Clear previous corridor entities
+    corridorEntitiesRef.current.forEach((e) => viewer.entities.remove(e));
+    corridorEntitiesRef.current = [];
+
+    if (!showFlowConduits) return;
+
+    // Determine which links are affected by active scenario
+    const epicenterConfig = SCENARIO_EPICENTERS[activeScenarioId] || null;
+    const affectedLinkIds = new Set(epicenterConfig?.affected_links || []);
+
+    // Merge simulationLinks if provided
+    const simLinksMap = new Map();
+    if (simulationLinks && Array.isArray(simulationLinks)) {
+      simulationLinks.forEach((sl) => {
+        simLinksMap.set(sl.link_id, sl);
+      });
+    }
+
+    HIGHWAY_CORRIDORS.forEach((corridor) => {
+      const isDisrupted = affectedLinkIds.has(corridor.link_id);
+      const simLink = simLinksMap.get(corridor.link_id);
+
+      // Convert WGS84 coordinates to Cesium Cartesian3 flat array [lon, lat, lon, lat, ...]
+      const positions = Cesium.Cartesian3.fromDegreesArray(
+        corridor.geometry.flatMap(([lat, lon]) => [lon, lat])
+      );
+
+      if (isDisrupted) {
+        // --- Disrupted Primary Corridor: Pulsating Red Dashed Hazard Aesthetic ---
+        const hazardLine = viewer.entities.add({
+          name: `${corridor.corridor_name} (Disrupted Shock Hazard)`,
+          polyline: {
+            positions,
+            width: 6.5,
+            clampToGround: true,
+            material: new Cesium.PolylineDashMaterialProperty({
+              color: Cesium.Color.fromCssColorString('#ef4444'),
+              gapColor: Cesium.Color.fromCssColorString('#7f1d1d').withAlpha(0.7),
+              dashLength: 26.0
+            })
+          }
+        });
+        corridorEntitiesRef.current.push(hazardLine);
+
+        // Hazard midpoint warning label
+        const midIdx = Math.floor(corridor.geometry.length / 2);
+        const midPt = corridor.geometry[midIdx];
+        const hazardLabel = viewer.entities.add({
+          name: `${corridor.corridor_name} Hazard Label`,
+          position: Cesium.Cartesian3.fromDegrees(midPt[1], midPt[0], 250),
+          label: {
+            text: `⚠️ ${corridor.highway_code || corridor.corridor_name}\nDISRUPTED (${shockIntensity}% SHOCK)`,
+            font: '900 11px "Plus Jakarta Sans", sans-serif',
+            fillColor: Cesium.Color.fromCssColorString('#fca5a5'),
+            outlineColor: Cesium.Color.fromCssColorString('#450a0a'),
+            outlineWidth: 3.5,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+            backgroundColor: Cesium.Color.fromCssColorString('#450a0a').withAlpha(0.85),
+            showBackground: true,
+            backgroundPadding: new Cesium.Cartesian2(6, 3),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          }
+        });
+        corridorEntitiesRef.current.push(hazardLabel);
+
+        // --- Active Alternative Bypass Route: Glowing Cyan/Emerald Corridor ---
+        if (enableMitigation && corridor.alternative_route?.geometry) {
+          const bypassPositions = Cesium.Cartesian3.fromDegreesArray(
+            corridor.alternative_route.geometry.flatMap(([lat, lon]) => [lon, lat])
+          );
+
+          const bypassLine = viewer.entities.add({
+            name: `${corridor.alternative_route.name} (Mitigated Bypass Corridor)`,
+            polyline: {
+              positions: bypassPositions,
+              width: 5.5,
+              clampToGround: true,
+              material: new Cesium.PolylineGlowMaterialProperty({
+                glowPower: 0.38,
+                taperPower: 0.05,
+                color: Cesium.Color.fromCssColorString('#10b981')
+              })
+            }
+          });
+          corridorEntitiesRef.current.push(bypassLine);
+
+          // Bypass midpoint indicator
+          const bypassMidIdx = Math.floor(corridor.alternative_route.geometry.length / 2);
+          const bypassMidPt = corridor.alternative_route.geometry[bypassMidIdx];
+          const bypassLabel = viewer.entities.add({
+            name: `${corridor.alternative_route.name} Bypass Label`,
+            position: Cesium.Cartesian3.fromDegrees(bypassMidPt[1], bypassMidPt[0], 280),
+            label: {
+              text: `🛡️ MITIGATION BYPASS ACTIVE\n${corridor.alternative_route.name} (+${corridor.alternative_route.transit_hours}h)`,
+              font: '900 11px "Plus Jakarta Sans", sans-serif',
+              fillColor: Cesium.Color.fromCssColorString('#a7f3d0'),
+              outlineColor: Cesium.Color.fromCssColorString('#064e3b'),
+              outlineWidth: 3.5,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+              backgroundColor: Cesium.Color.fromCssColorString('#064e3b').withAlpha(0.85),
+              showBackground: true,
+              backgroundPadding: new Cesium.Cartesian2(6, 3),
+              disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }
+          });
+          corridorEntitiesRef.current.push(bypassLabel);
+        }
+      } else {
+        // --- Normal Active Flow Corridor: Electric Cyan Glowing Conduit ---
+        const normalLine = viewer.entities.add({
+          name: `${corridor.corridor_name} (Active Flow Conduit)`,
+          polyline: {
+            positions,
+            width: 4.8,
+            clampToGround: true,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              glowPower: 0.28,
+              taperPower: 0.05,
+              color: Cesium.Color.fromCssColorString('#38bdf8')
+            })
+          }
+        });
+        corridorEntitiesRef.current.push(normalLine);
+      }
+    });
+  }, [isViewerReady, showFlowConduits, activeScenarioId, shockIntensity, enableMitigation, simulationLinks]);
+
+  // 4. Synchronize 3D Disruption Shockwave Ellipsoid at Epicenter
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed() || !isViewerReady) return;
+
+    // Clear previous shockwave entities
+    shockwaveEntitiesRef.current.forEach((e) => viewer.entities.remove(e));
+    shockwaveEntitiesRef.current = [];
+
+    if (!showShockwaves) return;
+
+    const epicenter = SCENARIO_EPICENTERS[activeScenarioId];
+    if (!epicenter) return;
+
+    const baseRadius = epicenter.radius_meters || 3500;
+    const centerPos = Cesium.Cartesian3.fromDegrees(
+      epicenter.longitude,
+      epicenter.latitude,
+      50
+    );
+
+    // 1. Pulsating Volumetric 3D Shockwave Ellipsoid
+    // Dynamically scales radius in a continuous pulsating harmonic wave
+    const pulsatingEllipsoid = viewer.entities.add({
+      name: `${epicenter.name} 3D Shockwave Ellipsoid`,
+      position: centerPos,
+      ellipsoid: {
+        radii: new Cesium.CallbackProperty(() => {
+          const now = Date.now() / 1000.0;
+          const cycle = (now % 2.5) / 2.5; // 0.0 to 1.0 every 2.5s
+          const currentRadius = baseRadius * (0.6 + 0.65 * cycle);
+          return new Cesium.Cartesian3(currentRadius, currentRadius, currentRadius * 0.45);
+        }, false),
+        material: new Cesium.ColorMaterialProperty(
+          new Cesium.CallbackProperty(() => {
+            const now = Date.now() / 1000.0;
+            const cycle = (now % 2.5) / 2.5;
+            const alpha = 0.4 * (1.0 - cycle); // Fades out as shockwave expands
+            return Cesium.Color.fromCssColorString('#ef4444').withAlpha(alpha);
+          }, false)
+        ),
+        outline: true,
+        outlineColor: new Cesium.CallbackProperty(() => {
+          const now = Date.now() / 1000.0;
+          const cycle = (now % 2.5) / 2.5;
+          const alpha = 0.85 * (1.0 - cycle);
+          return Cesium.Color.fromCssColorString('#f87171').withAlpha(alpha);
+        }, false),
+        outlineWidth: 2
+      }
+    });
+    shockwaveEntitiesRef.current.push(pulsatingEllipsoid);
+
+    // 2. Ground Terrain Ripple Disc
+    const groundRipple = viewer.entities.add({
+      name: `${epicenter.name} Ground Ripple`,
+      position: Cesium.Cartesian3.fromDegrees(epicenter.longitude, epicenter.latitude, 10),
+      ellipse: {
+        semiMajorAxis: new Cesium.CallbackProperty(() => {
+          const now = Date.now() / 1000.0;
+          const cycle = ((now + 0.8) % 2.5) / 2.5;
+          return baseRadius * (0.4 + 0.7 * cycle);
+        }, false),
+        semiMinorAxis: new Cesium.CallbackProperty(() => {
+          const now = Date.now() / 1000.0;
+          const cycle = ((now + 0.8) % 2.5) / 2.5;
+          return baseRadius * (0.4 + 0.7 * cycle);
+        }, false),
+        material: new Cesium.ColorMaterialProperty(
+          Cesium.Color.fromCssColorString('#dc2626').withAlpha(0.2)
+        ),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString('#ef4444'),
+        outlineWidth: 3,
+        height: 10,
+        extrudedHeight: 25
+      }
+    });
+    shockwaveEntitiesRef.current.push(groundRipple);
+
+    // 3. Epicenter Hazard Billboard Marker & Warning Badge
+    const billboardPos = Cesium.Cartesian3.fromDegrees(
+      epicenter.longitude,
+      epicenter.latitude,
+      700
+    );
+
+    const hazardIconSvg = createHazardIconSvg();
+
+    const hazardMarker = viewer.entities.add({
+      name: `${epicenter.name} Hazard Marker`,
+      position: billboardPos,
+      billboard: {
+        image: hazardIconSvg,
+        width: 44,
+        height: 44,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
+      },
+      label: {
+        text: `⚠️ DISRUPTION EPICENTER\n${epicenter.name}\n${epicenter.hazard_type}`,
+        font: '900 12px "Plus Jakarta Sans", sans-serif',
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.fromCssColorString('#450a0a'),
+        outlineWidth: 4,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+        pixelOffset: new Cesium.Cartesian2(0, -48),
+        backgroundColor: Cesium.Color.fromCssColorString('#7f1d1d').withAlpha(0.9),
+        showBackground: true,
+        backgroundPadding: new Cesium.Cartesian2(8, 4),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
+      }
+    });
+    shockwaveEntitiesRef.current.push(hazardMarker);
+  }, [isViewerReady, showShockwaves, activeScenarioId, shockIntensity]);
+
   // Smooth cinematic glide to a facility hub
   const flyToNode = useCallback((nodeId) => {
     const viewer = viewerRef.current;
@@ -440,6 +718,8 @@ export default function CesiumTwinViewport({
         return <Globe className="w-3.5 h-3.5 text-slate-400" />;
     }
   };
+
+  const activeEpicenter = SCENARIO_EPICENTERS[activeScenarioId];
 
   return (
     <div
@@ -527,15 +807,52 @@ export default function CesiumTwinViewport({
         </div>
       </div>
 
-      {/* Bottom-Left: Holographic Stock Ring Legend & Node Status HUD */}
+      {/* Bottom-Left: Holographic Stock Ring Legend, Flow Status, & Active Shock Banner */}
       <div className="absolute bottom-3 left-3 z-20 pointer-events-auto flex flex-col gap-2 max-w-sm">
+        {/* Active Disruption Alert HUD */}
+        {activeEpicenter && (
+          <div className="p-2.5 rounded-xl bg-rose-950/90 backdrop-blur-md border border-rose-500/60 text-white shadow-xl flex items-center justify-between gap-3 animate-pulse">
+            <div className="flex items-center gap-2">
+              <Flame className="w-4 h-4 text-rose-400 shrink-0" />
+              <div>
+                <div className="text-[11px] font-black text-rose-200 uppercase tracking-wide">
+                  Active Shock: {activeEpicenter.name}
+                </div>
+                <div className="text-[10px] text-rose-300 font-medium">
+                  {enableMitigation ? 'Cyan/Emerald Bypass Route Active' : 'Detours Disabled — Hazard Red'}
+                </div>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded bg-rose-900 border border-rose-400 text-rose-200">
+              {shockIntensity}%
+            </span>
+          </div>
+        )}
+
+        {/* Corridor & Stock Rings Legend Card */}
         <div className="p-3 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/80 text-white shadow-xl space-y-2">
           <div className="flex items-center justify-between text-[11px] font-black uppercase text-slate-400 tracking-wider">
-            <span>Capacity Stock Rings</span>
-            <span className="text-[10px] text-slate-500 font-mono">Fill %</span>
+            <span>Network Layers & Status</span>
+            <span className="text-[10px] text-slate-500 font-mono">3D Twin</span>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 text-[11px] font-bold">
+          {/* Highway Conduits Legend */}
+          <div className="flex items-center gap-2 text-[10px] font-bold border-b border-slate-700/60 pb-2">
+            <span className="flex items-center gap-1 text-sky-400">
+              <span className="w-3 h-1 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]" />
+              Nominal
+            </span>
+            <span className="flex items-center gap-1 text-rose-400">
+              <span className="w-3 h-1 rounded-full bg-rose-500 shadow-[0_0_8px_#ef4444]" />
+              Disrupted
+            </span>
+            <span className="flex items-center gap-1 text-emerald-400">
+              <span className="w-3 h-1 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
+              Bypass Route
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1.5 text-[11px] font-bold pt-0.5">
             <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-950/60 border border-emerald-600/40 text-emerald-400">
               <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
               <span>&ge;60% Safe</span>
@@ -564,8 +881,38 @@ export default function CesiumTwinViewport({
         </div>
       </div>
 
-      {/* Bottom-Right: Viewport Controls */}
+      {/* Bottom-Right: Viewport Controls & Highway Conduit Toggles */}
       <div className="absolute bottom-3 right-3 z-20 pointer-events-auto flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/80 shadow-xl text-white">
+        {/* Toggle 3D Flow Conduits */}
+        <button
+          type="button"
+          onClick={() => setShowFlowConduits(!showFlowConduits)}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+            showFlowConduits
+              ? 'bg-sky-600 text-white'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+          title="Toggle 3D Highway Flow Conduits & Bypasses"
+        >
+          <Route className="w-3.5 h-3.5" />
+          <span>Highways</span>
+        </button>
+
+        {/* Toggle Shockwaves */}
+        <button
+          type="button"
+          onClick={() => setShowShockwaves(!showShockwaves)}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+            showShockwaves
+              ? 'bg-rose-600 text-white'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+          title="Toggle Volumetric Disruption Shockwave"
+        >
+          <Radio className="w-3.5 h-3.5" />
+          <span>Shockwave</span>
+        </button>
+
         {/* Toggle 3D Buildings */}
         <button
           type="button"

@@ -622,6 +622,10 @@ export default function DigitalTwinTab() {
           selectedNodeId={selectedNodeId}
           onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
           simulationNodes={simulationData?.nodes}
+          simulationLinks={simulationData?.links}
+          activeScenarioId={selectedScenarioId}
+          shockIntensity={shockIntensity}
+          enableMitigation={enableMitigation}
           height="580px"
         />
       </div>

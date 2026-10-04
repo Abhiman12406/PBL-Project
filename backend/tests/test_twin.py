@@ -222,3 +222,68 @@ def test_extreme_intensity_boundary_conditions():
     )
     assert res_max["baseline_metrics"]["risk_index"] > 60.0
     assert res_max["mitigated_metrics"]["sla_delay_hours"] <= res_max["baseline_metrics"]["sla_delay_hours"]
+
+
+def test_corridor_highway_geometry_and_bypass_payloads():
+    """Verify that all inter-node corridor links contain WGS84 highway geometries, congestion indices, and bypasses."""
+    topology = digital_twin_engine.get_network_topology()
+    links = topology["links"]
+    assert len(links) == 4
+
+    corridor_ids = [l["link_id"] for l in links]
+    assert "LINK-JNPT-BHW" in corridor_ids
+    assert "LINK-BHW-THN" in corridor_ids
+    assert "LINK-BHW-NSK" in corridor_ids
+    assert "LINK-BHW-PUN" in corridor_ids
+
+    for link in links:
+        assert "geometry" in link and isinstance(link["geometry"], list)
+        assert len(link["geometry"]) >= 4, f"Link {link['link_id']} has insufficient polyline points"
+        assert "congestion_index" in link
+        assert link["congestion_index"] > 0.0
+        assert "epicenter_coordinates" in link
+        assert len(link["epicenter_coordinates"]) == 2
+
+        # Check alternative route geometry
+        assert "alternative_route" in link
+        alt = link["alternative_route"]
+        assert "geometry" in alt and isinstance(alt["geometry"], list)
+        assert len(alt["geometry"]) >= 3, f"Bypass for {link['link_id']} has insufficient points"
+
+
+def test_disruption_epicenter_and_conduit_congestion():
+    """Verify that simulated scenarios return disruption epicenters and realistic corridor congestion."""
+    scenarios = ["port_strike", "monsoon_closures", "bridge_failure"]
+
+    for sc_id in scenarios:
+        res = digital_twin_engine.simulate_scenario(
+            scenario_id=sc_id,
+            shock_intensity=75.0,
+            enable_mitigation=True
+        )
+
+        assert "epicenter" in res and res["epicenter"] is not None
+        epi = res["epicenter"]
+        assert "latitude" in epi and "longitude" in epi
+        assert 18.0 <= epi["latitude"] <= 20.5
+        assert 72.5 <= epi["longitude"] <= 74.35
+        assert epi["radius_meters"] >= 1000
+
+        assert "affected_links" in res and len(res["affected_links"]) > 0
+        aff_id = res["affected_links"][0]
+
+        # Inspect link metrics
+        target_link = next(l for l in res["links"] if l["link_id"] == aff_id)
+        assert "geometry" in target_link and len(target_link["geometry"]) >= 4
+        assert "alternative_route" in target_link
+        assert "geometry" in target_link["alternative_route"]
+
+        # Baseline congestion should be high on shocked link (> 70)
+        assert target_link["baseline"]["congestion_index"] >= 70.0
+        assert target_link["baseline"]["status"] in ["congested", "blocked"]
+
+        # Mitigated congestion should be alleviated (< 45) via bypass rerouting
+        assert target_link["mitigated"]["congestion_index"] <= 45.0
+        assert target_link["mitigated"]["is_rerouted"] is True
+        assert target_link["mitigated"]["status"] == "rerouted_active"
+

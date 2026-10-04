@@ -2,10 +2,14 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FACILITY_NODES,
+  HIGHWAY_CORRIDORS,
+  SCENARIO_EPICENTERS,
   CAMERA_PRESETS,
   CORRIDOR_BOUNDS,
   getStockCapacityStatus,
-  validateNodeSchema
+  validateNodeSchema,
+  validateLinkSchema,
+  validateEpicenterSchema
 } from '../src/constants/logisticsTopology.js';
 
 describe('Cesium 3D Geospatial Topology & WGS84 Facility Beacons', () => {
@@ -103,5 +107,122 @@ describe('Cesium 3D Geospatial Topology & WGS84 Facility Beacons', () => {
     const redResult2 = getStockCapacityStatus(50, 1000); // 5%
     assert.equal(redResult2.status, 'critical');
     assert.equal(redResult2.hexColor, '#ef4444');
+  });
+});
+
+describe('3D Highway Flow Conduits & Disruption Shockwave Visualizer (Issue 02)', () => {
+  test('Highway corridors contain valid WGS84 geometries for all 4 inter-node routes', () => {
+    assert.equal(HIGHWAY_CORRIDORS.length, 4, 'Should define 4 primary highway corridors');
+
+    const expectedLinkIds = [
+      'LINK-JNPT-BHW',
+      'LINK-BHW-THN',
+      'LINK-BHW-NSK',
+      'LINK-BHW-PUN'
+    ];
+
+    const actualLinkIds = HIGHWAY_CORRIDORS.map((c) => c.link_id);
+    for (const expectedId of expectedLinkIds) {
+      assert.ok(actualLinkIds.includes(expectedId), `Missing corridor link: ${expectedId}`);
+    }
+
+    for (const corridor of HIGHWAY_CORRIDORS) {
+      const validation = validateLinkSchema(corridor);
+      assert.ok(
+        validation.valid,
+        `Corridor ${corridor.link_id} schema invalid: ${validation.errors.join(', ')}`
+      );
+
+      // Verify every coordinate in the primary geometry lies within corridor WGS84 bounds
+      for (const [lat, lon] of corridor.geometry) {
+        assert.ok(
+          lat >= CORRIDOR_BOUNDS.minLat && lat <= CORRIDOR_BOUNDS.maxLat,
+          `Corridor ${corridor.link_id} point latitude ${lat} outside corridor bounds`
+        );
+        assert.ok(
+          lon >= CORRIDOR_BOUNDS.minLon && lon <= CORRIDOR_BOUNDS.maxLon,
+          `Corridor ${corridor.link_id} point longitude ${lon} outside corridor bounds`
+        );
+      }
+    }
+  });
+
+  test('Every highway corridor defines an alternative bypass route with continuous geometry', () => {
+    for (const corridor of HIGHWAY_CORRIDORS) {
+      assert.ok(corridor.alternative_route, `Link ${corridor.link_id} missing alternative_route`);
+      const alt = corridor.alternative_route;
+      assert.ok(alt.name && alt.name.length > 0, `Link ${corridor.link_id} bypass route missing name`);
+      assert.ok(alt.distance_km > 0, `Link ${corridor.link_id} bypass distance invalid`);
+      assert.ok(alt.transit_hours > 0, `Link ${corridor.link_id} bypass transit hours invalid`);
+      assert.ok(
+        Array.isArray(alt.geometry) && alt.geometry.length >= 3,
+        `Link ${corridor.link_id} bypass must have at least 3 geometry points`
+      );
+
+      // Verify bypass points are in corridor bounds
+      for (const [lat, lon] of alt.geometry) {
+        assert.ok(
+          lat >= CORRIDOR_BOUNDS.minLat && lat <= CORRIDOR_BOUNDS.maxLat,
+          `Bypass point [${lat}, ${lon}] out of bounds for ${corridor.link_id}`
+        );
+        assert.ok(
+          lon >= CORRIDOR_BOUNDS.minLon && lon <= CORRIDOR_BOUNDS.maxLon,
+          `Bypass point [${lat}, ${lon}] out of bounds for ${corridor.link_id}`
+        );
+      }
+    }
+  });
+
+  test('Preset scenario disruption epicenters have valid WGS84 coordinates and affected link pairings', () => {
+    const scenarioKeys = ['port_strike', 'monsoon_closures', 'bridge_failure'];
+
+    for (const key of scenarioKeys) {
+      const epicenter = SCENARIO_EPICENTERS[key];
+      assert.ok(epicenter, `Scenario epicenter missing for ${key}`);
+
+      const validation = validateEpicenterSchema(epicenter);
+      assert.ok(
+        validation.valid,
+        `Epicenter ${key} validation failed: ${validation.errors.join(', ')}`
+      );
+
+      assert.ok(
+        epicenter.latitude >= CORRIDOR_BOUNDS.minLat && epicenter.latitude <= CORRIDOR_BOUNDS.maxLat,
+        `Epicenter ${key} latitude ${epicenter.latitude} outside bounds`
+      );
+      assert.ok(
+        epicenter.longitude >= CORRIDOR_BOUNDS.minLon && epicenter.longitude <= CORRIDOR_BOUNDS.maxLon,
+        `Epicenter ${key} longitude ${epicenter.longitude} outside bounds`
+      );
+
+      assert.ok(epicenter.radius_meters >= 1000, `Epicenter ${key} radius should be >= 1000m`);
+      assert.ok(Array.isArray(epicenter.affected_links) && epicenter.affected_links.length > 0);
+
+      // Verify that every affected link exists in HIGHWAY_CORRIDORS
+      for (const affId of epicenter.affected_links) {
+        const link = HIGHWAY_CORRIDORS.find((c) => c.link_id === affId);
+        assert.ok(link, `Affected link ${affId} for scenario ${key} not found in HIGHWAY_CORRIDORS`);
+      }
+    }
+  });
+
+  test('Disruption shockwave coordinate payloads match specific geography epicenters', () => {
+    // 1. Port strike epicenter matches JNPT
+    const portEpicenter = SCENARIO_EPICENTERS.port_strike;
+    assert.equal(portEpicenter.latitude, 18.9496);
+    assert.equal(portEpicenter.longitude, 72.9515);
+    assert.ok(portEpicenter.affected_links.includes('LINK-JNPT-BHW'));
+
+    // 2. Monsoon closures epicenter matches Kasara Ghat NH-160
+    const monsoonEpicenter = SCENARIO_EPICENTERS.monsoon_closures;
+    assert.equal(monsoonEpicenter.latitude, 19.6967);
+    assert.equal(monsoonEpicenter.longitude, 73.5611);
+    assert.ok(monsoonEpicenter.affected_links.includes('LINK-BHW-NSK'));
+
+    // 3. Bridge failure epicenter matches Khandala / Bhor Ghat Viaduct on Expressway
+    const bridgeEpicenter = SCENARIO_EPICENTERS.bridge_failure;
+    assert.equal(bridgeEpicenter.latitude, 18.7557);
+    assert.equal(bridgeEpicenter.longitude, 73.4091);
+    assert.ok(bridgeEpicenter.affected_links.includes('LINK-BHW-PUN'));
   });
 });

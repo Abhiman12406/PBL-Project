@@ -108,16 +108,38 @@ DEFAULT_TOPOLOGY_LINKS: List[Dict[str, Any]] = [
         "source": "PORT-JNPT-01",
         "target": "DC-BHW-01",
         "corridor_name": "JNPT-Bhiwandi Freight Expressway",
+        "highway_code": "NH-348 / NH-48",
         "distance_km": 64.5,
         "nominal_transit_hours": 3.0,
         "capacity_trucks_per_day": 350,
         "co2_kg_per_trip": 142.0,
+        "congestion_index": 18.5,
+        "epicenter_coordinates": [18.9496, 72.9515],
+        "geometry": [
+            [18.9496, 72.9515],
+            [18.9720, 72.9800],
+            [19.0050, 73.0150],
+            [19.0400, 72.9500],
+            [19.1200, 72.9100],
+            [19.1750, 72.9500],
+            [19.2183, 72.9781],
+            [19.2550, 73.0100],
+            [19.2967, 73.0631]
+        ],
         "alternative_route": {
             "name": "Dighi / Coastal Rail Feeder Bypass",
             "distance_km": 88.0,
             "transit_hours": 4.8,
             "co2_kg_per_trip": 162.0,
-            "description": "Coastal freight rail bypass routing directly into Navi Mumbai dry terminals."
+            "description": "Coastal freight rail bypass routing directly into Navi Mumbai dry terminals.",
+            "geometry": [
+                [18.9496, 72.9515],
+                [18.8800, 72.9700],
+                [18.9200, 73.0300],
+                [19.0800, 73.0900],
+                [19.1800, 73.1200],
+                [19.2967, 73.0631]
+            ]
         }
     },
     {
@@ -125,16 +147,32 @@ DEFAULT_TOPOLOGY_LINKS: List[Dict[str, Any]] = [
         "source": "DC-BHW-01",
         "target": "HUB-THN-01",
         "corridor_name": "Bhiwandi-Thane Urban Spur",
+        "highway_code": "Old Agra Road / SH-40",
         "distance_km": 22.0,
         "nominal_transit_hours": 1.5,
         "capacity_trucks_per_day": 200,
         "co2_kg_per_trip": 48.0,
+        "congestion_index": 22.0,
+        "epicenter_coordinates": [19.2550, 73.0200],
+        "geometry": [
+            [19.2967, 73.0631],
+            [19.2700, 73.0400],
+            [19.2450, 73.0100],
+            [19.2183, 72.9781]
+        ],
         "alternative_route": {
             "name": "Ghodbunder Road Express Connector",
             "distance_km": 31.0,
             "transit_hours": 2.2,
             "co2_kg_per_trip": 58.0,
-            "description": "Peripheral arterial ring bypass skirting central municipal bottlenecks."
+            "description": "Peripheral arterial ring bypass skirting central municipal bottlenecks.",
+            "geometry": [
+                [19.2967, 73.0631],
+                [19.3200, 73.0100],
+                [19.2800, 72.9300],
+                [19.2300, 72.9500],
+                [19.2183, 72.9781]
+            ]
         }
     },
     {
@@ -142,16 +180,42 @@ DEFAULT_TOPOLOGY_LINKS: List[Dict[str, Any]] = [
         "source": "DC-BHW-01",
         "target": "DEP-NSK-01",
         "corridor_name": "NH-160 Kasara Ghat Corridor",
+        "highway_code": "NH-160",
         "distance_km": 142.0,
         "nominal_transit_hours": 4.5,
         "capacity_trucks_per_day": 180,
         "co2_kg_per_trip": 312.0,
+        "congestion_index": 25.0,
+        "epicenter_coordinates": [19.6967, 73.5611],
+        "geometry": [
+            [19.2967, 73.0631],
+            [19.3800, 73.1600],
+            [19.4600, 73.2800],
+            [19.5500, 73.4000],
+            [19.6400, 73.5000],
+            [19.6967, 73.5611],
+            [19.7500, 73.6100],
+            [19.8500, 73.6900],
+            [19.9200, 73.7400],
+            [19.9975, 73.7898]
+        ],
         "alternative_route": {
             "name": "NH-61 via Malshej Ghat / SH-44 Feeder Bypass",
             "distance_km": 195.0,
             "transit_hours": 6.8,
             "co2_kg_per_trip": 385.0,
-            "description": "All-weather southern mountain pass bypass maintaining freight continuity when Kasara Ghat is closed."
+            "description": "All-weather southern mountain pass bypass maintaining freight continuity when Kasara Ghat is closed.",
+            "geometry": [
+                [19.2967, 73.0631],
+                [19.2437, 73.1355],
+                [19.2500, 73.4000],
+                [19.3400, 73.7700],
+                [19.2600, 73.9800],
+                [19.1800, 74.1200],
+                [19.5700, 74.2100],
+                [19.8400, 73.9900],
+                [19.9975, 73.7898]
+            ]
         }
     },
     {
@@ -159,21 +223,47 @@ DEFAULT_TOPOLOGY_LINKS: List[Dict[str, Any]] = [
         "source": "DC-BHW-01",
         "target": "FC-PUN-01",
         "corridor_name": "Mumbai-Pune Expressway Viaduct Corridor",
+        "highway_code": "Yashwantrao Chavan Expressway",
         "distance_km": 158.0,
         "nominal_transit_hours": 4.0,
         "capacity_trucks_per_day": 260,
         "co2_kg_per_trip": 345.0,
+        "congestion_index": 20.0,
+        "epicenter_coordinates": [18.7557, 73.4091],
+        "geometry": [
+            [19.2967, 73.0631],
+            [19.2183, 72.9781],
+            [19.1000, 73.0100],
+            [18.9894, 73.1175],
+            [18.9200, 73.2200],
+            [18.8400, 73.3100],
+            [18.7557, 73.4091],
+            [18.7100, 73.5500],
+            [18.6600, 73.6800],
+            [18.5913, 73.7389],
+            [18.5204, 73.8567]
+        ],
         "alternative_route": {
             "name": "Old NH-48 Highway + Khopoli/Tamhini Secondary Bypass",
             "distance_km": 178.0,
             "transit_hours": 5.8,
             "co2_kg_per_trip": 395.0,
-            "description": "Parallel national highway alignment with dedicated night freight convoy windows."
+            "description": "Parallel national highway alignment with dedicated night freight convoy windows.",
+            "geometry": [
+                [19.2967, 73.0631],
+                [19.1500, 73.1200],
+                [18.9894, 73.1175],
+                [18.8800, 73.2800],
+                [18.7800, 73.3500],
+                [18.7400, 73.4500],
+                [18.6500, 73.6000],
+                [18.5204, 73.8567]
+            ]
         }
     }
 ]
 
-# Preset Operational Shock Scenarios
+# Preset Operational Shock Scenarios with Disruption Epicenters
 PRESET_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "port_strike": {
         "id": "port_strike",
@@ -183,7 +273,14 @@ PRESET_SCENARIOS: Dict[str, Dict[str, Any]] = {
         "affected_nodes": ["PORT-JNPT-01"],
         "affected_links": ["LINK-JNPT-BHW"],
         "description": "Spontaneous dockworker strike at JNPT terminates gantry crane unloading and gate turnaround. Container dwell time surges from 24h to 120h+, accumulating demurrage and choking inbound container flows to Bhiwandi DC.",
-        "contingency_action": "Activate Coastal Rail Feeder via Dighi/Hazira, redirect urgent airfreight, and trigger strategic buffer drawdown across Pune FC and Nashik Depot."
+        "contingency_action": "Activate Coastal Rail Feeder via Dighi/Hazira, redirect urgent airfreight, and trigger strategic buffer drawdown across Pune FC and Nashik Depot.",
+        "epicenter": {
+            "name": "JNPT Port Container Terminal Gate",
+            "latitude": 18.9496,
+            "longitude": 72.9515,
+            "radius_meters": 3200,
+            "hazard_type": "Labor Strike Gate Blockade"
+        }
     },
     "monsoon_closures": {
         "id": "monsoon_closures",
@@ -193,7 +290,14 @@ PRESET_SCENARIOS: Dict[str, Dict[str, Any]] = {
         "affected_nodes": ["DEP-NSK-01"],
         "affected_links": ["LINK-BHW-NSK"],
         "description": "Torrential monsoon rains (180mm/24h) trigger heavy mudslides at Kasara Ghat on NH-160 and localized waterlogging in Bhiwandi lowlands, stranding northern freight convoys.",
-        "contingency_action": "Divert heavy freight via NH-61 Malshej Ghat bypass, utilize LCV light-cargo shuttle relays, and expedite local supplier fulfillment in Nashik."
+        "contingency_action": "Divert heavy freight via NH-61 Malshej Ghat bypass, utilize LCV light-cargo shuttle relays, and expedite local supplier fulfillment in Nashik.",
+        "epicenter": {
+            "name": "Kasara Ghat NH-160 Mudslide Epicenter",
+            "latitude": 19.6967,
+            "longitude": 73.5611,
+            "radius_meters": 4500,
+            "hazard_type": "Extreme Torrential Mudslide"
+        }
     },
     "bridge_failure": {
         "id": "bridge_failure",
@@ -203,7 +307,14 @@ PRESET_SCENARIOS: Dict[str, Dict[str, Any]] = {
         "affected_nodes": ["FC-PUN-01"],
         "affected_links": ["LINK-BHW-PUN"],
         "description": "Structural fracture on Khandala viaduct of Mumbai-Pune Expressway halts all multi-axle commercial vehicles indefinitely. High-value automotive supply chain and FMCG SLAs threatened.",
-        "contingency_action": "Reroute freight via Old NH-48 Highway with expedited night convoy permits and cross-docking balancing at Panvel Depot."
+        "contingency_action": "Reroute freight via Old NH-48 Highway with expedited night convoy permits and cross-docking balancing at Panvel Depot.",
+        "epicenter": {
+            "name": "Khandala Expressway Viaduct Pier Fracture",
+            "latitude": 18.7557,
+            "longitude": 73.4091,
+            "radius_meters": 3800,
+            "hazard_type": "Structural Pier Fracture"
+        }
     }
 }
 
@@ -367,6 +478,8 @@ class DigitalTwinEngine:
             "comparative_delta": comparative_delta,
             "nodes": comparative_nodes,
             "links": comparative_links,
+            "affected_links": affected_links,
+            "epicenter": scenario_meta.get("epicenter"),
             "contingency_recommendations": contingency_recommendations,
             "timeline_events": timeline_events
         }
@@ -453,6 +566,7 @@ class DigitalTwinEngine:
                         link["simulated_hours"] = round(sim_time, 2)
                         link["delay_hours"] = round(added_delay, 2)
                         link["status"] = "congested" if shock_fraction < 0.6 else "blocked"
+                        link["congestion_index"] = round(min(98.5, 45.0 + 52.0 * shock_fraction), 1)
                         link["is_rerouted"] = False
 
                         # Delay hours scaled by active trips
@@ -476,6 +590,7 @@ class DigitalTwinEngine:
                         link["simulated_hours"] = round(sim_time, 2)
                         link["delay_hours"] = round(contingency_delay, 2)
                         link["status"] = "rerouted_active"
+                        link["congestion_index"] = round(min(38.0, 22.0 + 15.0 * shock_fraction), 1)
                         link["is_rerouted"] = True
 
                         corridor_delay = (contingency_delay * trips * 0.04)
@@ -491,6 +606,7 @@ class DigitalTwinEngine:
                     link["simulated_hours"] = base_time
                     link["delay_hours"] = 0.0
                     link["status"] = "normal"
+                    link["congestion_index"] = round(float(link.get("nominal_congestion", 18.5)) + random.uniform(-1.0, 1.0), 1)
                     link["is_rerouted"] = False
                     fuel_burn = link["distance_km"] * 0.32
                     co2_trip = fuel_burn * 2.68
@@ -648,9 +764,11 @@ class DigitalTwinEngine:
                 "nominal_hours": l["nominal_hours"],
                 "simulated_hours": l["simulated_hours"],
                 "delay_hours": l["delay_hours"],
+                "congestion_index": l.get("congestion_index", 18.5),
                 "status": l["status"],
                 "is_rerouted": l["is_rerouted"],
-                "alternative_route": l["alternative_route"]
+                "alternative_route": l["alternative_route"],
+                "geometry": l.get("geometry", [])
             })
 
         return {
@@ -722,18 +840,23 @@ class DigitalTwinEngine:
                 "source": orig["source"],
                 "target": orig["target"],
                 "corridor_name": orig["corridor_name"],
+                "highway_code": orig.get("highway_code", ""),
                 "distance_km": orig["distance_km"],
                 "nominal_hours": orig["nominal_transit_hours"],
+                "geometry": orig.get("geometry", []),
+                "epicenter_coordinates": orig.get("epicenter_coordinates"),
                 "alternative_route": orig["alternative_route"],
                 "baseline": {
                     "simulated_hours": bl.get("simulated_hours", orig["nominal_transit_hours"]),
                     "delay_hours": bl.get("delay_hours", 0.0),
+                    "congestion_index": bl.get("congestion_index", 18.5),
                     "status": bl.get("status", "normal"),
                     "is_rerouted": bl.get("is_rerouted", False)
                 },
                 "mitigated": {
                     "simulated_hours": ml.get("simulated_hours", orig["nominal_transit_hours"]),
                     "delay_hours": ml.get("delay_hours", 0.0),
+                    "congestion_index": ml.get("congestion_index", 18.5),
                     "status": ml.get("status", "normal"),
                     "is_rerouted": ml.get("is_rerouted", False)
                 }
