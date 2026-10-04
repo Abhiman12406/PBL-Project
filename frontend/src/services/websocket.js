@@ -19,6 +19,7 @@ class TelemetryWebSocketClient {
       reroute: new Set(),
       state: new Set(),
       status: new Set(),
+      roadblocks: new Set(),
       roadblocksCleared: new Set()
     };
   }
@@ -51,6 +52,8 @@ class TelemetryWebSocketClient {
         this.setStatus('CONNECTED');
         this.reconnectAttempts = 0;
         this.startHeartbeat();
+        // Immediately request state & corridor resynchronization upon connection/reconnection
+        this.resync();
       };
 
       this.ws.onmessage = (event) => {
@@ -131,6 +134,9 @@ class TelemetryWebSocketClient {
         if (msg.simulation) {
           this.notifyListeners('state', msg.simulation);
         }
+        if (msg.active_roadblocks) {
+          this.notifyListeners('roadblocks', msg.active_roadblocks);
+        }
         break;
 
       case 'REROUTE_EVENT':
@@ -138,13 +144,18 @@ class TelemetryWebSocketClient {
         break;
 
       case 'SIMULATION_STATE':
+        this.notifyListeners('tick', msg);
         if (msg.simulation) {
           this.notifyListeners('state', msg.simulation);
+        }
+        if (msg.active_roadblocks) {
+          this.notifyListeners('roadblocks', msg.active_roadblocks);
         }
         break;
 
       case 'ROADBLOCKS_CLEARED':
         this.notifyListeners('roadblocksCleared', msg);
+        this.notifyListeners('roadblocks', []);
         break;
 
       case 'PONG':
@@ -215,6 +226,10 @@ class TelemetryWebSocketClient {
 
   clearRoadblocks() {
     return this.send({ action: 'clear_disruptions' });
+  }
+
+  resync() {
+    return this.send({ action: 'resync' });
   }
 
   disconnect() {

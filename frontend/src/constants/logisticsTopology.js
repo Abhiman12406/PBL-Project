@@ -491,3 +491,44 @@ export function validateEpicenterSchema(epicenter) {
     errors
   };
 }
+
+/**
+ * 2.5D / 3D Cyber-Tactical Schematic Vector Coordinates for Offline / Fallback Display.
+ */
+export const SCHEMATIC_COORDS = {
+  'PORT-JNPT-01': { x: 220, y: 470, labelX: 220, labelY: 535 },
+  'HUB-THN-01':   { x: 270, y: 350, labelX: 220, labelY: 335 },
+  'DC-BHW-01':    { x: 440, y: 240, labelX: 440, labelY: 175 },
+  'DEP-NSK-01':   { x: 770, y: 130, labelX: 770, labelY: 70 },
+  'FC-PUN-01':    { x: 670, y: 550, labelX: 670, labelY: 620 }
+};
+
+export const SCHEMATIC_CORRIDOR_PATHS = {
+  'LINK-JNPT-BHW': {
+    path: 'M 220 470 C 240 410, 260 360, 270 350 C 310 320, 390 270, 440 240',
+    bypassPath: 'M 220 470 C 320 480, 410 390, 440 240',
+    mid: { x: 340, y: 330 }
+  },
+  'LINK-BHW-THN': {
+    path: 'M 440 240 L 270 350',
+    bypassPath: 'M 440 240 Q 320 280 270 350',
+    mid: { x: 355, y: 295 }
+  },
+  'LINK-BHW-NSK': {
+    path: 'M 440 240 Q 600 185 770 130',
+    bypassPath: 'M 440 240 C 510 110, 680 90, 770 130',
+    mid: { x: 600, y: 185 }
+  },
+  'LINK-BHW-PUN': {
+    path: 'M 440 240 C 490 340, 580 460, 670 550',
+    bypassPath: 'M 440 240 C 430 380, 540 540, 670 550',
+    mid: { x: 550, y: 400 }
+  }
+};
+
+export const SCHEMATIC_EPICENTERS = {
+  port_strike: { x: 220, y: 470, label: 'JNPT Gate Strike Blockade' },
+  monsoon_closures: { x: 600, y: 185, label: 'Kasara Ghat NH-160 Mudslide' },
+  bridge_failure: { x: 550, y: 400, label: 'Khandala Viaduct Pier Fracture' }
+};
+

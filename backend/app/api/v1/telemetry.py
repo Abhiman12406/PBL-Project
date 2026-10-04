@@ -120,6 +120,18 @@ class TelemetryWebSocketHub:
                 if action == "ping":
                     await websocket.send_json({"type": "PONG", "timestamp": telemetry_engine.get_clock_info()})
 
+                elif action in ("resync", "get_state"):
+                    state = telemetry_engine.get_state()
+                    resync_msg = {
+                        "type": "SIMULATION_STATE",
+                        "simulation": telemetry_engine.get_clock_info(),
+                        "vehicles": telemetry_engine.get_all_vehicles_snapshot(),
+                        "active_roadblocks": list(telemetry_engine.active_roadblocks.values()),
+                        "macro_corridor": state.get("macro_corridor"),
+                        "autonomous_sentinel": state.get("autonomous_sentinel")
+                    }
+                    await websocket.send_json(resync_msg)
+
                 elif action == "play":
                     telemetry_engine.play()
                     state_msg = {

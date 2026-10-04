@@ -54,6 +54,18 @@ async def test_e2e_persona_rbac_matrix():
         )
         assert res_twin.status_code == 200, f"Director failed twin: {res_twin.text}"
 
+        res_twin_top = await client.get(
+            "/api/v1/twin/topology",
+            headers={"X-Persona-Role": "director"}
+        )
+        assert res_twin_top.status_code == 200
+
+        res_twin_scen = await client.get(
+            "/api/v1/twin/scenarios",
+            headers={"X-Persona-Role": "director"}
+        )
+        assert res_twin_scen.status_code == 200
+
         # Forbidden: Admin system-status
         res_dir_admin = await client.get(
             "/api/v1/admin/system-status",
@@ -76,13 +88,20 @@ async def test_e2e_persona_rbac_matrix():
         )
         assert res_disp_disr.status_code == 200
 
-        # Forbidden: Forecasting predict
+        # Forbidden: Forecasting predict & Twin simulate
         res_disp_fc = await client.post(
             "/api/v1/forecasting/predict",
             headers={"X-Persona-Role": "dispatcher"},
             json={"sku_id": "SKU-NAS-AGRI-01", "forecast_horizon_days": 14}
         )
         assert res_disp_fc.status_code == 403
+
+        res_disp_twin = await client.post(
+            "/api/v1/twin/simulate-scenario",
+            headers={"X-Persona-Role": "dispatcher"},
+            json={"scenario_id": "port_strike", "shock_intensity": 50.0, "enable_mitigation": True}
+        )
+        assert res_disp_twin.status_code == 403
 
         # Customs tests
         # Allowed: Compliance parse-doc, HS classify
@@ -93,7 +112,7 @@ async def test_e2e_persona_rbac_matrix():
         )
         assert res_cust_hs.status_code == 200
 
-        # Forbidden: Routing optimize
+        # Forbidden: Routing optimize & Twin simulate
         res_cust_rt = await client.post(
             "/api/v1/routing/optimize",
             headers={"X-Persona-Role": "customs"},
@@ -106,13 +125,27 @@ async def test_e2e_persona_rbac_matrix():
         )
         assert res_cust_rt.status_code == 403
 
+        res_cust_twin = await client.post(
+            "/api/v1/twin/simulate-scenario",
+            headers={"X-Persona-Role": "customs"},
+            json={"scenario_id": "port_strike", "shock_intensity": 50.0, "enable_mitigation": True}
+        )
+        assert res_cust_twin.status_code == 403
+
         # Admin tests
-        # Allowed: All endpoints including Admin system status and Retrain models
+        # Allowed: All endpoints including Admin system status, Retrain models, and Twin
         res_admin_status = await client.get(
             "/api/v1/admin/system-status",
             headers={"X-Persona-Role": "admin"}
         )
         assert res_admin_status.status_code == 200
+
+        res_admin_twin = await client.post(
+            "/api/v1/twin/simulate-scenario",
+            headers={"X-Persona-Role": "admin"},
+            json={"scenario_id": "port_strike", "shock_intensity": 50.0, "enable_mitigation": True}
+        )
+        assert res_admin_twin.status_code == 200
         assert res_admin_status.json()["status"] == "ok"
 
 
@@ -383,6 +416,15 @@ def test_e2e_telemetry_websocket_and_disruption():
         ws.send_json({"action": "set_speed", "speed": 2.0})
         speed_msg = ws.receive_json()
         assert speed_msg["type"] in ["SIMULATION_STATE", "TELEMETRY_TICK"]
+
+        # Send resync command (verifies Issue 05 state resynchronization upon network reconnect)
+        ws.send_json({"action": "resync"})
+        resync_msg = ws.receive_json()
+        assert resync_msg["type"] == "SIMULATION_STATE"
+        assert "simulation" in resync_msg
+        assert "vehicles" in resync_msg
+        assert "active_roadblocks" in resync_msg
+        assert "macro_corridor" in resync_msg
 
         # Inject disruption via REST
         res_disr = client.post(

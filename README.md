@@ -5,7 +5,8 @@
 [![PyTorch](https://img.shields.io/badge/ML-PyTorch%202.2%2B-EE4C2C.svg)](https://pytorch.org/)
 [![React 19](https://img.shields.io/badge/Frontend-React%2019%20%2B%20Vite-61DAFB.svg)](https://react.dev/)
 [![Tailwind CSS v4](https://img.shields.io/badge/Styling-Tailwind%20v4-38B2AC.svg)](https://tailwindcss.com/)
-[![Tests](https://img.shields.io/badge/Tests-57%20Passed-brightgreen.svg)]()
+[![CesiumJS](https://img.shields.io/badge/3D%20GIS-CesiumJS%201.146%2B-blueviolet.svg)](https://cesium.com/)
+[![Tests](https://img.shields.io/badge/Tests-93%20Passed-brightgreen.svg)]()
 
 An enterprise-grade, cognitive software orchestration layer designed to eliminate friction across multi-echelon supply chain networks. Deployed on the **Western India Economic Corridor** (JNPT Port / Mumbai ↔ Thane ↔ Nashik ↔ Pune), the platform seamlessly couples deep neural networks, reinforcement learning, local semantic vector search, discrete-event simulation, and real-time WebSocket telemetry.
 
@@ -101,10 +102,12 @@ PBL/
 - **Vector RAG Classification**: Sub-second ($< 500$ms SLA) semantic search matching cargo descriptions against an international Harmonized System (HS) catalogue.
 - **Automated Discrepancy Engine**: Cross-references invoice line items against customs rulebooks, identifying tariff mismatches, valuation anomalies, weight inversions, and missing regulatory certificates (Phytosanitary, CDSCO) with remediation advice.
 
-### 4. Cognitive Digital Twin Scenario Studio
-- **Discrete-Event Simulation (DES)**: Models the multi-echelon network topology across JNPT Port, Bhiwandi DC, Thane Hub, Nashik Depot, and Pune Center.
-- **Shock Injection**: Simulates operational shocks (JNPT Port Labor Strike, Mumbai Monsoon Flooding, Expressway Bridge Failure) with an interactive severity slider ($1–100\%$).
-- **Comparative Metrics**: Sub-5-second execution evaluating Baseline vs. Mitigated SLA delays, inventory stockout risks, holding cost surges, and automated contingency re-routing paths.
+### 4. 3D Cognitive Digital Twin & Autonomous AI Sentinel
+- **CesiumJS 3D Photogrammetry & Macro-Facility Beacons**: Interactive 3D spatial twin rendering 5 multi-echelon hubs (JNPT Port, Bhiwandi DC, Thane Hub, Nashik Depot, Pune Center) with dynamic volumetric stock capacity rings (Green $\ge 60\%$, Amber $30-59\%$, Red $< 30\%$).
+- **3D Highway Flow Conduits & Dynamic Shockwaves**: Multi-segment highway corridors (NH-48, Mumbai-Pune Expressway, NH-160 Kasara Ghat) animated with volumetric flow polylines, alternative detour bypass conduits, and pulsating radar shockwaves centered over disruption epicenters.
+- **Cyber-Tactical 2.5D/3D Schematic Offline Fallback**: High-performance SVG schematic vector view providing full operational fidelity, Western Ghats topography, animated highway flow conduits, and node inspector drawers when Cesium Ion tokens are unconfigured or offline.
+- **Autonomous AI Sentinel**: 1Hz macro-corridor telemetry monitor streaming over WebSockets with automated risk classification (Green/Yellow/Red), proactive contingency detour triggers, and instant connection-resynchronization.
+- **Discrete-Event Simulation (DES)**: Sub-5-second execution evaluating Baseline vs. Mitigated SLA delays, inventory stockout risks, holding cost surges, and automated contingency re-routing paths.
 
 ---
 
@@ -168,6 +171,18 @@ npm install
 npm run dev
 ```
 Open your browser to **`http://localhost:5173`**.
+
+##### Optional: Cesium Ion 3D Globe Token Configuration
+The platform features an enterprise **3D Cesium Digital Twin** with high-resolution global terrain and 3D building photogrammetry.
+- **Zero-Config Cyber-Tactical Offline Fallback**: If no token is configured, the platform **automatically renders a high-performance Cyber-Tactical 2.5D/3D Schematic Vector View** with dynamic capacity rings, animated SVG highway flow conduits, active hazard pulses, and detours—with zero setup required.
+- **Enabling High-Resolution 3D Globe**:
+  1. Create a free Cesium Ion account at [cesium.com/ion](https://cesium.com/ion) and generate a default access token.
+  2. Create or edit `frontend/.env`:
+     ```env
+     VITE_CESIUM_ION_TOKEN=your_cesium_ion_access_token_here
+     ```
+  3. Restart the Vite dev server (`npm run dev`), or paste your token directly into the in-app **Cesium Setup Modal** to activate the 3D globe immediately without restarting.
+  4. Use the top-left **3D Globe / 3D Schematic** toggle button inside the viewport to switch between views anytime.
 
 ---
 
@@ -329,18 +344,25 @@ Follow this guided tour to demonstrate the platform across all four roles:
    - Toggle horizons between **7 Days**, **14 Days**, and **30 Days**.
    - Notice the multi-step neural forecast with shaded **95% Confidence Intervals** and suggested buffer safety stock.
    - Adjust the **Promotional Uplift** and **Weather Disruption** sliders to observe dynamic demand sensitivity.
-4. Navigate to the **Digital Twin Studio** tab:
-   - Click on the **JNPT Port Labor Strike** scenario card.
-   - Drag the shock severity slider to **75%** and ensure **Apply Mitigation** is toggled ON.
-   - Click **Run What-If Simulation**; inspect side-by-side Baseline vs. Mitigated SLA delays, holding cost surges, and alternative bypass routing.
+4. Navigate to the **Digital Twin Command Center** tab:
+   - Experience the **3D Cesium Twin Viewport** (or instant **Cyber-Tactical 2.5D/3D Schematic View**).
+   - In the top-right camera dock, click **JNPT Port** to glide the camera directly above the marine terminal and inspect its dynamic stock capacity rings.
+   - Click on any facility node (or beacon) to slide open the **Facility Inspector Drawer**, displaying live capacity %, inbound container throughput, and active transport conduits.
+   - In the **Scenario Studio** (bottom-left drawer), select the **JNPT Port Labor Strike** preset, adjust intensity to **75%**, and observe the red shockwave ring pulsing across Mumbai harbor.
+   - Click **Simulate Shock Wave**; within $< 2$ seconds, view the **Comparative Financial Impact Drawer** (bottom-right) revealing Net Savings (₹10,40,000 INR), SLA delays avoided, and mitigation bypass conduits.
+   - Notice the **Role Lens Selector** at the top of the impact drawer: as Director, observe executive ROI and financial cost avoidance.
 
 ### Step 2: Fleet Dispatcher Walkthrough
 1. Switch persona to **Fleet Dispatcher**. Note that the active view dynamically updates to authorized routing workflows.
-2. Under the **Route & Fleet Optimizer** tab:
+2. In the **Digital Twin Command Center**:
+   - Notice the top ribbon indicates `Fleet Dispatcher` mode with operational telemetry focus.
+   - The Scenario Studio shows a clean RBAC advisory note explaining that shock simulation triggers are reserved for Directors and Admins.
+   - In the Impact Drawer, switch to the **Dispatcher** lens to focus on fleet detours, delay hours avoided, and alternative bypass conduits around the Kasara Ghat mudslide.
+3. Under the **Route & Fleet Optimizer** tab:
    - View the interactive Leaflet map centered over the Western India corridor (Mumbai, JNPT, Thane, Nashik, Pune).
    - Select vehicle `TRK-MH-01` and toggle traffic mode between **Standard** and **Congested** to inspect route duration and emissions penalties.
    - Scroll down to the **Backhaul Freight Matching** section; click **1-Click Assign Backhaul** on a return-haul freight posting to immediately eliminate empty kilometers.
-3. In the global **Simulation Controller** bar:
+4. In the global **Simulation Controller** bar:
    - Click **Play** to start vehicle telemetry animations along the corridor.
    - Click **Inject Roadblock** to simulate a highway bridge obstruction; observe the vehicle marker dynamically recalculating an alternative bypass route.
 
@@ -350,6 +372,8 @@ Follow this guided tour to demonstrate the platform across all four roles:
    - Click the preset button **Clean Electronics BoL**; view extracted structured JSON (shipper, consignee, declared value, ports) and notice the **APPROVED** green badge.
    - Click **Discrepant Agro Invoice**; observe the automated compliance engine flagging a critical valuation anomaly and a missing Phytosanitary Certificate with explicit remediation advice.
    - Use the **HS Code Classifier** query box to test any product description (e.g., `solar panel microinverters`) and witness sub-second vector RAG tariff classification.
+3. In the **Digital Twin Command Center**:
+   - Switch to the **Customs** lens in the Impact Drawer to audit JNPT port clearance dwell times and demurrage cost reductions.
 
 ### Step 4: Enterprise IT Administrator Walkthrough
 1. Switch persona to **Enterprise IT Administrator**.
@@ -357,24 +381,28 @@ Follow this guided tour to demonstrate the platform across all four roles:
    - Inspect the **Infrastructure & Service Status** cards (PostgreSQL status, Redis status, Gemini AI key configuration, and PyTorch `.pt` model weights).
    - Under **PyTorch Neural Model Re-Training**, select `All Models`, choose `15 Epochs`, and click **Trigger Model Retraining**. Observe the live progress indicator and view the resulting training losses, validation metrics, and updated checkpoint file sizes.
    - In the **RBAC Policy Tester**, click **Run RBAC Guard Test** to verify HTTP 200 OK authorization. Click **Switch to Director (Assert 403)** to verify immediate rejection and security policy enforcement.
+3. In the **Digital Twin Command Center**:
+   - Switch to the **Admin** lens to inspect real-time DES engine execution latency ($< 5.0$s SLA target), 60+ FPS rendering statistics, and active WebSocket streaming connection health.
 
 ---
 
 ## Verification & Automated Test Suite
 
-The platform includes a test suite covering unit logic, neural inference, and integration flows:
+The platform includes an automated end-to-end test suite (93 total tests passing) verifying backend neural inference, REST APIs, WebSocket resynchronization, geospatial topologies, and frontend build integrity:
 
 ```bash
+# 1. Run backend automated test suite (64 tests)
 cd backend
+python -m pytest tests/ -v
 
-# Run the complete test suite
-..\.venv\Scripts\pytest -v
-
-# Run only the end-to-end integration test suite
-..\.venv\Scripts\pytest tests/test_e2e_integration.py -v
-
-# Test frontend production build
+# 2. Run frontend automated test suite (29 tests)
 cd ../frontend
+npm test
+
+# 3. Verify zero lint errors
+npx oxlint
+
+# 4. Verify production Vite bundle
 npm run build
 ```
 

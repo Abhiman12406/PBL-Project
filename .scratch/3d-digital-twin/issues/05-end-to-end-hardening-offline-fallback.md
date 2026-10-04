@@ -4,11 +4,11 @@
 
 **Blocked by:** 04: Modernized Glassmorphic Command Center & Scenario Studio
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Graceful fallback view renders interactive setup instructions and 3D schematic rendering when `VITE_CESIUM_ION_TOKEN` is unconfigured or invalid, without crashing the tab.
-- [ ] WebSocket streaming client automatically reconnects upon temporary network disconnection and resynchronizes 3D node and corridor states.
-- [ ] Rendering performance maintains $\ge 60$ FPS on standard hardware through macro-facility aggregation and optimized polyline shaders.
-- [ ] End-to-end operational verification across all 4 personas confirms correct RBAC permissions, camera navigation, and metric filtering.
-- [ ] Automated end-to-end test suite passes completely across all backend engines (`pytest`) and frontend production build/lint (`npm run build`, `npx oxlint`).
-- [ ] Project documentation and setup instructions in `README.md` are updated with Cesium Ion token configuration and 3D Digital Twin walkthrough steps.
+- [x] Graceful fallback view renders interactive setup instructions and 3D schematic rendering when `VITE_CESIUM_ION_TOKEN` is unconfigured or invalid, without crashing the tab.
+- [x] WebSocket streaming client automatically reconnects upon temporary network disconnection and resynchronizes 3D node and corridor states.
+- [x] Rendering performance maintains $\ge 60$ FPS on standard hardware through macro-facility aggregation and optimized polyline shaders.
+- [x] End-to-end operational verification across all 4 personas confirms correct RBAC permissions, camera navigation, and metric filtering.
+- [x] Automated end-to-end test suite passes completely across all backend engines (`pytest`) and frontend production build/lint (`npm run build`, `npx oxlint`).
+- [x] Project documentation and setup instructions in `README.md` are updated with Cesium Ion token configuration and 3D Digital Twin walkthrough steps.
