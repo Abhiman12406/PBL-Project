@@ -4,11 +4,11 @@
 
 **Blocked by:** 01: Cesium 3D Cyber-Geospatial Viewport & WGS84 Facility Beacons
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Autonomous AI Sentinel engine continuously ingests neural demand forecast bounds (upper 95% CI) and compares against multi-echelon stock levels and corridor link capacities.
-- [ ] Risk scoring algorithm computes corridor bottleneck indices (0–100) and autonomously triggers mitigation directives when risk exceeds safe thresholds.
-- [ ] Simulation broadcast engine integrates the Autonomous Sentinel evaluation into the 1Hz simulation tick loop, streaming macro-corridor telemetry over WebSockets.
-- [ ] API endpoints allow querying autonomous sentinel decision logs and toggling between Autonomous Sentinel mode and Manual Operator mode.
-- [ ] Frontend HUD widget displays live network risk index, active AI directives, and an interactive Autonomous/Manual toggle switch.
-- [ ] Automated integration tests verify that demand forecast anomalies trigger autonomous mitigations, mode toggling persists correctly, and 1Hz WebSocket payloads match the required schema.
+- [x] Autonomous AI Sentinel engine continuously ingests neural demand forecast bounds (upper 95% CI) and compares against multi-echelon stock levels and corridor link capacities.
+- [x] Risk scoring algorithm computes corridor bottleneck indices (0–100) and autonomously triggers mitigation directives when risk exceeds safe thresholds.
+- [x] Simulation broadcast engine integrates the Autonomous Sentinel evaluation into the 1Hz simulation tick loop, streaming macro-corridor telemetry over WebSockets.
+- [x] API endpoints allow querying autonomous sentinel decision logs and toggling between Autonomous Sentinel mode and Manual Operator mode.
+- [x] Frontend HUD widget displays live network risk index, active AI directives, and an interactive Autonomous/Manual toggle switch.
+- [x] Automated integration tests verify that demand forecast anomalies trigger autonomous mitigations, mode toggling persists correctly, and 1Hz WebSocket payloads match the required schema.

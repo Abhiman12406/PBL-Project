@@ -522,22 +522,31 @@ class TelemetrySimulationEngine:
         }
 
     def get_tick_payload(self) -> Dict[str, Any]:
-        """Constructs canonical WebSocket tick message."""
+        """Constructs canonical WebSocket tick message with macro-corridor & autonomous sentinel telemetry."""
+        from app.engines.autonomous_agent import autonomous_agent_engine
+        autonomous_sentinel = autonomous_agent_engine.evaluate_tick(self)
+        macro_corridor = autonomous_agent_engine.get_macro_corridor_telemetry(self)
+
         return {
             "type": "TELEMETRY_TICK",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "simulation": self.get_clock_info(),
             "vehicles": self.get_all_vehicles_snapshot(),
-            "active_roadblocks": list(self.active_roadblocks.values())
+            "active_roadblocks": list(self.active_roadblocks.values()),
+            "macro_corridor": macro_corridor,
+            "autonomous_sentinel": autonomous_sentinel
         }
 
     def get_state(self) -> Dict[str, Any]:
         """Returns full simulation state representation."""
+        from app.engines.autonomous_agent import autonomous_agent_engine
         return {
             "status": "SUCCESS",
             "simulation": self.get_clock_info(),
             "vehicles": self.get_all_vehicles_snapshot(),
-            "active_roadblocks": list(self.active_roadblocks.values())
+            "active_roadblocks": list(self.active_roadblocks.values()),
+            "macro_corridor": autonomous_agent_engine.get_macro_corridor_telemetry(self),
+            "autonomous_sentinel": autonomous_agent_engine.get_status()
         }
 
 

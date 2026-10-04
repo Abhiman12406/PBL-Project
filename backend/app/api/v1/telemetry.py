@@ -55,13 +55,16 @@ class TelemetryWebSocketHub:
         logger.info("WebSocket telemetry client connected. Total clients: %d", len(self.active_connections))
         
         # Send initial handshake state snapshot
+        state = telemetry_engine.get_state()
         greeting = {
             "type": "CONNECTION_ESTABLISHED",
             "message": "Connected to Cognitive Logistics Real-Time Telemetry Streaming Hub",
             "client_count": len(self.active_connections),
             "simulation": telemetry_engine.get_clock_info(),
             "vehicles": telemetry_engine.get_all_vehicles_snapshot(),
-            "active_roadblocks": list(telemetry_engine.active_roadblocks.values())
+            "active_roadblocks": list(telemetry_engine.active_roadblocks.values()),
+            "macro_corridor": state.get("macro_corridor"),
+            "autonomous_sentinel": state.get("autonomous_sentinel")
         }
         await websocket.send_json(greeting)
 

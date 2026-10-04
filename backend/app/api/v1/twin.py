@@ -93,3 +93,78 @@ def simulate_scenario(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Simulation failed: {str(e)}"
         )
+
+
+class AutonomousToggleRequest(BaseModel):
+    mode: Optional[str] = Field(default=None, description="Optional target mode: AUTONOMOUS_SENTINEL or MANUAL_OPERATOR. If omitted, flips mode.")
+
+
+@router.get("/autonomous-status")
+def get_autonomous_sentinel_status(
+    _persona: Dict[str, Any] = Depends(require_role(["dispatcher", "director", "admin"]))
+):
+    """
+    Returns live Autonomous AI Sentinel telemetry status, composite risk index,
+    active preventative directives, and recent decision audit events.
+    """
+    try:
+        from app.engines.autonomous_agent import autonomous_agent_engine
+        status_data = autonomous_agent_engine.get_status()
+        status_data["recent_decision_log"] = autonomous_agent_engine.decision_log[-20:]
+        return status_data
+    except Exception as e:
+        logger.error("Failed to fetch autonomous sentinel status: %s", str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch autonomous sentinel status: {str(e)}"
+        )
+
+
+@router.post("/autonomous-toggle")
+def toggle_autonomous_sentinel_mode(
+    request: Optional[AutonomousToggleRequest] = None,
+    _persona: Dict[str, Any] = Depends(require_role(["director", "admin"]))
+):
+    """
+    Toggles between AUTONOMOUS_SENTINEL mode and MANUAL_OPERATOR mode.
+    Restricted to Supply Chain Director and Administrator roles.
+    """
+    try:
+        from app.engines.autonomous_agent import autonomous_agent_engine
+        target_mode = request.mode if request else None
+        return autonomous_agent_engine.toggle_mode(target_mode)
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve)
+        )
+    except Exception as e:
+        logger.error("Failed to toggle autonomous sentinel mode: %s", str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to toggle autonomous mode: {str(e)}"
+        )
+
+
+@router.get("/autonomous-directives")
+def get_autonomous_directives(
+    _persona: Dict[str, Any] = Depends(require_role(["dispatcher", "director", "admin"]))
+):
+    """
+    Returns active autonomous mitigation directives and full historical decision audit log.
+    """
+    try:
+        from app.engines.autonomous_agent import autonomous_agent_engine
+        return {
+            "mode": autonomous_agent_engine.mode,
+            "risk_index": autonomous_agent_engine.risk_index,
+            "active_directives": autonomous_agent_engine.active_directives,
+            "decision_log": autonomous_agent_engine.decision_log
+        }
+    except Exception as e:
+        logger.error("Failed to fetch autonomous directives: %s", str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch directives: {str(e)}"
+        )
+

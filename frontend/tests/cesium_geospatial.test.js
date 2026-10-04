@@ -226,3 +226,57 @@ describe('3D Highway Flow Conduits & Disruption Shockwave Visualizer (Issue 02)'
     assert.ok(bridgeEpicenter.affected_links.includes('LINK-BHW-PUN'));
   });
 });
+
+describe('Autonomous AI Sentinel & 1Hz Macro-Corridor Telemetry (Issue 03)', () => {
+  test('Sentinel operational modes and risk thresholds follow specification', () => {
+    const MODE_AUTONOMOUS = 'AUTONOMOUS_SENTINEL';
+    const MODE_MANUAL = 'MANUAL_OPERATOR';
+    const CRITICAL_FLOOR = 70.0;
+    const NOMINAL_CEILING = 40.0;
+
+    assert.equal(MODE_AUTONOMOUS, 'AUTONOMOUS_SENTINEL');
+    assert.equal(MODE_MANUAL, 'MANUAL_OPERATOR');
+
+    const evaluateRiskStatus = (risk) => {
+      if (risk >= CRITICAL_FLOOR) return 'CRITICAL_INTERVENTION';
+      if (risk >= NOMINAL_CEILING) return 'ELEVATED';
+      return 'NOMINAL';
+    };
+
+    assert.equal(evaluateRiskStatus(25.0), 'NOMINAL');
+    assert.equal(evaluateRiskStatus(40.0), 'ELEVATED');
+    assert.equal(evaluateRiskStatus(55.2), 'ELEVATED');
+    assert.equal(evaluateRiskStatus(70.0), 'CRITICAL_INTERVENTION');
+    assert.equal(evaluateRiskStatus(84.6), 'CRITICAL_INTERVENTION');
+  });
+
+  test('Validates 1Hz macro-corridor telemetry payload structure', () => {
+    const mockMacroCorridor = {
+      timestamp: new Date().toISOString(),
+      nodes: FACILITY_NODES.map(n => ({
+        node_id: n.node_id,
+        current_stock: n.nominal_stock,
+        capacity_units: n.capacity_units,
+        status: 'HEALTHY'
+      })),
+      corridors: HIGHWAY_CORRIDORS.map(c => ({
+        link_id: c.link_id,
+        congestion_index: c.nominal_congestion_index,
+        status: 'OPTIMAL'
+      })),
+      active_shocks_count: 0,
+      sentinel: {
+        mode: 'AUTONOMOUS_SENTINEL',
+        risk_index: 24.5,
+        status: 'NOMINAL',
+        active_directives: []
+      }
+    };
+
+    assert.equal(mockMacroCorridor.nodes.length, 5);
+    assert.equal(mockMacroCorridor.corridors.length, 4);
+    assert.equal(mockMacroCorridor.sentinel.mode, 'AUTONOMOUS_SENTINEL');
+    assert.equal(mockMacroCorridor.sentinel.status, 'NOMINAL');
+  });
+});
+

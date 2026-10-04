@@ -109,6 +109,12 @@ export const api = {
   simulateTwinScenario: (payload) => fetchWithPersona('/twin/simulate-scenario', {
     method: 'POST',
     body: JSON.stringify(payload)
-  })
+  }),
+  getTwinAutonomousStatus: () => fetchWithPersona('/twin/autonomous-status'),
+  toggleTwinAutonomousMode: (mode) => fetchWithPersona('/twin/autonomous-toggle', {
+    method: 'POST',
+    body: JSON.stringify(mode ? { mode } : {})
+  }),
+  getTwinAutonomousDirectives: () => fetchWithPersona('/twin/autonomous-directives')
 };
 

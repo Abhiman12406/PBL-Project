@@ -30,6 +30,7 @@ import {
   CAMERA_PRESETS,
   getStockCapacityStatus
 } from '../constants/logisticsTopology';
+import AutonomousSentinelHUD from './AutonomousSentinelHUD';
 
 // Helper to create an SVG icon data URL for facility billboards
 function createPinIconSvg(tierNumber, statusColor) {
@@ -805,6 +806,11 @@ export default function CesiumTwinViewport({
             <span>Kasara Ghat</span>
           </button>
         </div>
+      </div>
+
+      {/* Top-Right: Floating Autonomous AI Sentinel 1Hz HUD */}
+      <div className="absolute top-3 right-3 z-20 pointer-events-auto max-w-xs sm:max-w-sm">
+        <AutonomousSentinelHUD compact={false} />
       </div>
 
       {/* Bottom-Left: Holographic Stock Ring Legend, Flow Status, & Active Shock Banner */}
