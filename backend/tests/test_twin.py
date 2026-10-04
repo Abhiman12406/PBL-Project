@@ -28,12 +28,14 @@ def test_engine_topology_structure():
     assert "DEP-NSK-01" in node_ids
     assert "FC-PUN-01" in node_ids
 
-    # Check node attributes: capacity, replenishment lead times, holding costs
+    # Check node attributes: capacity, replenishment lead times, holding costs, WGS84 coordinates
     for node in nodes:
         assert node["capacity_units"] > 0
         assert node["lead_time_days"] > 0
         assert node["holding_cost_per_unit_day"] > 0
         assert "latitude" in node and "longitude" in node
+        assert 18.0 <= node["latitude"] <= 20.5, f"Latitude {node['latitude']} outside corridor bounds"
+        assert 72.5 <= node["longitude"] <= 74.2, f"Longitude {node['longitude']} outside corridor bounds"
 
     # Check links
     links = topology["links"]

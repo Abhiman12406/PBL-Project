@@ -5,6 +5,7 @@ import {
   Anchor,
   CloudRain,
   Compass,
+  Globe,
   ShieldCheck,
   Clock,
   Fuel,
@@ -19,6 +20,7 @@ import {
   Split,
   Route
 } from 'lucide-react';
+import CesiumTwinViewport from './CesiumTwinViewport';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -598,6 +600,31 @@ export default function DigitalTwinTab() {
           </div>
         </div>
       )}
+
+      {/* 3.5. Cesium 3D Cyber-Geospatial Viewport & WGS84 Facility Beacons */}
+      <div className="bright-card p-6 sm:p-7 rounded-2xl bg-white border-2 border-slate-200 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-bold text-blue-700 mb-1">
+              <Globe className="w-3.5 h-3.5 text-blue-600" />
+              <span>3D Cyber-Geospatial Digital Twin</span>
+            </div>
+            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <span>Western India Macro Corridor & Multi-Echelon Facility Beacons</span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Real-world CesiumJS 3D virtual globe with digital terrain and photorealistic 3D buildings. Holographic capacity rings reflect live stock levels across JNPT, Bhiwandi, Thane, Nashik, and Pune.
+            </p>
+          </div>
+        </div>
+
+        <CesiumTwinViewport
+          selectedNodeId={selectedNodeId}
+          onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
+          simulationNodes={simulationData?.nodes}
+          height="580px"
+        />
+      </div>
 
       {/* 4. Multi-Echelon Network Topology Node Status Diagram */}
       {simulationData && (
