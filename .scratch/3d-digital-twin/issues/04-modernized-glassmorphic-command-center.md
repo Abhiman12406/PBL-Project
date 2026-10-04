@@ -4,11 +4,11 @@
 
 **Blocked by:** 02: 3D Highway Flow Conduits & Disruption Shockwave Visualizer, 03: Autonomous AI Sentinel Engine & 1Hz Telemetry Stream
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Digital Twin studio UI is restructured into a full-height 3D cyber-geospatial canvas with collapsible floating glassmorphic overlay cards.
-- [ ] Bottom-left drawer provides 1-click shock scenario presets (Port Strike, Monsoons, Bridge Failure), an interactive intensity slider (1–100%), and a mitigation toggle.
-- [ ] Bottom-right drawer renders side-by-side comparative financial impact cards (baseline vs. mitigated cost, net savings, SLA delay hours avoided) and dynamic timeline charts.
-- [ ] Interactive 3D entity clicking selects facilities, glides the camera smoothly to the node, and opens a right-side inspector drawer showing granular stock, lead time, and dock throughput metrics.
-- [ ] Scenario simulations execute in $< 5.0$ seconds and immediately update 3D shockwaves, corridor conduit hazard lights, and mitigated bypass routes.
-- [ ] Automated tests verify UI state updates upon 3D node picking, simulation response times, and calculation consistency ($mitigated\_cost \le baseline\_cost$).
+- [x] Digital Twin studio UI is restructured into a full-height 3D cyber-geospatial canvas with collapsible floating glassmorphic overlay cards.
+- [x] Bottom-left drawer provides 1-click shock scenario presets (Port Strike, Monsoons, Bridge Failure), an interactive intensity slider (1–100%), and a mitigation toggle.
+- [x] Bottom-right drawer renders side-by-side comparative financial impact cards (baseline vs. mitigated cost, net savings, SLA delay hours avoided) and dynamic timeline charts.
+- [x] Interactive 3D entity clicking selects facilities, glides the camera smoothly to the node, and opens a right-side inspector drawer showing granular stock, lead time, and dock throughput metrics.
+- [x] Scenario simulations execute in $< 5.0$ seconds and immediately update 3D shockwaves, corridor conduit hazard lights, and mitigated bypass routes.
+- [x] Automated tests verify UI state updates upon 3D node picking, simulation response times, and calculation consistency ($mitigated\_cost \le baseline\_cost$).

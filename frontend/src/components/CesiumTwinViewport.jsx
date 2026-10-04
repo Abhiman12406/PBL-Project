@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import {
@@ -57,7 +57,7 @@ function createHazardIconSvg() {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-export default function CesiumTwinViewport({
+const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
   selectedNodeId = 'DC-BHW-01',
   onSelectNode = () => {},
   simulationNodes = null,
@@ -65,9 +65,13 @@ export default function CesiumTwinViewport({
   activeScenarioId = 'port_strike',
   shockIntensity = 75,
   enableMitigation = true,
-  height = '580px',
-  className = ''
-}) {
+  height = '100%',
+  className = '',
+  showLegend = true,
+  showViewportControls = true,
+  showTopRibbon = true,
+  showSentinelHUD = true
+}, ref) {
   const containerRef = useRef(null);
   const creditContainerRef = useRef(null);
   const viewerRef = useRef(null);
@@ -702,6 +706,21 @@ export default function CesiumTwinViewport({
     }
   };
 
+  // Imperative API for parent container control
+  useImperativeHandle(ref, () => ({
+    flyToNode: (nodeId) => flyToNode(nodeId),
+    flyToPreset: (presetKey) => flyToPreset(presetKey),
+    resetCamera: () => flyToPreset('CORRIDOR_OVERVIEW'),
+    toggleBuildings: handleToggleBuildings,
+    setShowFlowConduits,
+    setShowShockwaves,
+    setShowBuildings,
+    showFlowConduits,
+    showShockwaves,
+    showBuildings,
+    activePreset
+  }), [flyToNode, flyToPreset, handleToggleBuildings, showFlowConduits, showShockwaves, showBuildings, activePreset]);
+
   // Node icon helper
   const getNodeIcon = (nodeType) => {
     switch (nodeType) {
@@ -734,216 +753,224 @@ export default function CesiumTwinViewport({
       <div ref={creditContainerRef} className="hidden" />
 
       {/* Top Floating Quick-Navigation Camera Ribbon */}
-      <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        {/* Left: Corridor Header & Cyber Tag */}
-        <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-700/80 text-white shadow-lg">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-black tracking-wide text-slate-100 uppercase">
-            Western India 3D Cyber-Twin
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono font-bold border border-blue-500/30">
-            WGS84 Real-World
-          </span>
+      {showTopRibbon && (
+        <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+          {/* Left: Corridor Header & Cyber Tag */}
+          <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-700/80 text-white shadow-lg">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs font-black tracking-wide text-slate-100 uppercase">
+              Western India 3D Cyber-Twin
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono font-bold border border-blue-500/30">
+              WGS84 Real-World
+            </span>
+          </div>
+
+          {/* Center/Right: 1-Click Smooth Glide Navigation Ribbon */}
+          <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-700/80 shadow-xl">
+            {/* Corridor Overview */}
+            <button
+              type="button"
+              onClick={() => flyToPreset('CORRIDOR_OVERVIEW')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                activePreset === 'CORRIDOR_OVERVIEW'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Angled bird-eye view of Western Maharashtra corridor"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>Corridor</span>
+            </button>
+
+            <div className="h-4 w-[1px] bg-slate-700 mx-0.5" />
+
+            {/* 5 Facility Hub Presets */}
+            {FACILITY_NODES.map((node) => {
+              const isSelected = selectedNodeId === node.node_id;
+              return (
+                <button
+                  key={node.node_id}
+                  type="button"
+                  onClick={() => {
+                    onSelectNode(node.node_id);
+                    flyToNode(node.node_id);
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-[#ff5400] text-white shadow-md'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
+                  title={`${node.tier_label} • ${node.city}`}
+                >
+                  {getNodeIcon(node.node_type)}
+                  <span>{node.shortName}</span>
+                </button>
+              );
+            })}
+
+            <div className="h-4 w-[1px] bg-slate-700 mx-0.5" />
+
+            {/* Mountain Pass Preset: Kasara Ghat */}
+            <button
+              type="button"
+              onClick={() => flyToPreset('KASARA_GHAT')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                activePreset === 'KASARA_GHAT'
+                  ? 'bg-amber-600 text-white shadow-md'
+                  : 'text-amber-400/90 hover:text-amber-300 hover:bg-slate-800'
+              }`}
+              title="Steep mountain pass on NH-160 subject to monsoon landslides"
+            >
+              <Mountain className="w-3.5 h-3.5" />
+              <span>Kasara Ghat</span>
+            </button>
+          </div>
         </div>
-
-        {/* Center/Right: 1-Click Smooth Glide Navigation Ribbon */}
-        <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-700/80 shadow-xl">
-          {/* Corridor Overview */}
-          <button
-            type="button"
-            onClick={() => flyToPreset('CORRIDOR_OVERVIEW')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activePreset === 'CORRIDOR_OVERVIEW'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            title="Angled bird-eye view of Western Maharashtra corridor"
-          >
-            <Globe className="w-3.5 h-3.5" />
-            <span>Corridor</span>
-          </button>
-
-          <div className="h-4 w-[1px] bg-slate-700 mx-0.5" />
-
-          {/* 5 Facility Hub Presets */}
-          {FACILITY_NODES.map((node) => {
-            const isSelected = selectedNodeId === node.node_id;
-            return (
-              <button
-                key={node.node_id}
-                type="button"
-                onClick={() => {
-                  onSelectNode(node.node_id);
-                  flyToNode(node.node_id);
-                }}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  isSelected
-                    ? 'bg-[#ff5400] text-white shadow-md'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
-                }`}
-                title={`${node.tier_label} • ${node.city}`}
-              >
-                {getNodeIcon(node.node_type)}
-                <span>{node.shortName}</span>
-              </button>
-            );
-          })}
-
-          <div className="h-4 w-[1px] bg-slate-700 mx-0.5" />
-
-          {/* Mountain Pass Preset: Kasara Ghat */}
-          <button
-            type="button"
-            onClick={() => flyToPreset('KASARA_GHAT')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activePreset === 'KASARA_GHAT'
-                ? 'bg-amber-600 text-white shadow-md'
-                : 'text-amber-400/90 hover:text-amber-300 hover:bg-slate-800'
-            }`}
-            title="Steep mountain pass on NH-160 subject to monsoon landslides"
-          >
-            <Mountain className="w-3.5 h-3.5" />
-            <span>Kasara Ghat</span>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Top-Right: Floating Autonomous AI Sentinel 1Hz HUD */}
-      <div className="absolute top-3 right-3 z-20 pointer-events-auto max-w-xs sm:max-w-sm">
-        <AutonomousSentinelHUD compact={false} />
-      </div>
+      {showSentinelHUD && (
+        <div className="absolute top-3 right-3 z-20 pointer-events-auto max-w-xs sm:max-w-sm">
+          <AutonomousSentinelHUD compact={false} />
+        </div>
+      )}
 
       {/* Bottom-Left: Holographic Stock Ring Legend, Flow Status, & Active Shock Banner */}
-      <div className="absolute bottom-3 left-3 z-20 pointer-events-auto flex flex-col gap-2 max-w-sm">
-        {/* Active Disruption Alert HUD */}
-        {activeEpicenter && (
-          <div className="p-2.5 rounded-xl bg-rose-950/90 backdrop-blur-md border border-rose-500/60 text-white shadow-xl flex items-center justify-between gap-3 animate-pulse">
-            <div className="flex items-center gap-2">
-              <Flame className="w-4 h-4 text-rose-400 shrink-0" />
-              <div>
-                <div className="text-[11px] font-black text-rose-200 uppercase tracking-wide">
-                  Active Shock: {activeEpicenter.name}
-                </div>
-                <div className="text-[10px] text-rose-300 font-medium">
-                  {enableMitigation ? 'Cyan/Emerald Bypass Route Active' : 'Detours Disabled — Hazard Red'}
+      {showLegend && (
+        <div className="absolute bottom-3 left-3 z-20 pointer-events-auto flex flex-col gap-2 max-w-sm">
+          {/* Active Disruption Alert HUD */}
+          {activeEpicenter && (
+            <div className="p-2.5 rounded-xl bg-rose-950/90 backdrop-blur-md border border-rose-500/60 text-white shadow-xl flex items-center justify-between gap-3 animate-pulse">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-rose-400 shrink-0" />
+                <div>
+                  <div className="text-[11px] font-black text-rose-200 uppercase tracking-wide">
+                    Active Shock: {activeEpicenter.name}
+                  </div>
+                  <div className="text-[10px] text-rose-300 font-medium">
+                    {enableMitigation ? 'Cyan/Emerald Bypass Route Active' : 'Detours Disabled — Hazard Red'}
+                  </div>
                 </div>
               </div>
-            </div>
-            <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded bg-rose-900 border border-rose-400 text-rose-200">
-              {shockIntensity}%
-            </span>
-          </div>
-        )}
-
-        {/* Corridor & Stock Rings Legend Card */}
-        <div className="p-3 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/80 text-white shadow-xl space-y-2">
-          <div className="flex items-center justify-between text-[11px] font-black uppercase text-slate-400 tracking-wider">
-            <span>Network Layers & Status</span>
-            <span className="text-[10px] text-slate-500 font-mono">3D Twin</span>
-          </div>
-
-          {/* Highway Conduits Legend */}
-          <div className="flex items-center gap-2 text-[10px] font-bold border-b border-slate-700/60 pb-2">
-            <span className="flex items-center gap-1 text-sky-400">
-              <span className="w-3 h-1 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]" />
-              Nominal
-            </span>
-            <span className="flex items-center gap-1 text-rose-400">
-              <span className="w-3 h-1 rounded-full bg-rose-500 shadow-[0_0_8px_#ef4444]" />
-              Disrupted
-            </span>
-            <span className="flex items-center gap-1 text-emerald-400">
-              <span className="w-3 h-1 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
-              Bypass Route
-            </span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-1.5 text-[11px] font-bold pt-0.5">
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-950/60 border border-emerald-600/40 text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
-              <span>&ge;60% Safe</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-950/60 border border-amber-600/40 text-amber-400">
-              <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b]" />
-              <span>30-59% Warn</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-rose-950/60 border border-rose-600/40 text-rose-400">
-              <span className="w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_8px_#ef4444]" />
-              <span>&lt;30% Risk</span>
-            </div>
-          </div>
-
-          {hoveredNode && (
-            <div className="mt-2 pt-2 border-t border-slate-700/60 flex items-center justify-between text-xs">
-              <div className="font-extrabold text-white flex items-center gap-1.5">
-                {getNodeIcon(hoveredNode.node_type)}
-                <span>{hoveredNode.name}</span>
-              </div>
-              <span className="text-slate-400 font-mono text-[11px]">
-                {hoveredNode.city}
+              <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded bg-rose-900 border border-rose-400 text-rose-200">
+                {shockIntensity}%
               </span>
             </div>
           )}
+
+          {/* Corridor & Stock Rings Legend Card */}
+          <div className="p-3 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/80 text-white shadow-xl space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-black uppercase text-slate-400 tracking-wider">
+              <span>Network Layers & Status</span>
+              <span className="text-[10px] text-slate-500 font-mono">3D Twin</span>
+            </div>
+
+            {/* Highway Conduits Legend */}
+            <div className="flex items-center gap-2 text-[10px] font-bold border-b border-slate-700/60 pb-2">
+              <span className="flex items-center gap-1 text-sky-400">
+                <span className="w-3 h-1 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]" />
+                Nominal
+              </span>
+              <span className="flex items-center gap-1 text-rose-400">
+                <span className="w-3 h-1 rounded-full bg-rose-500 shadow-[0_0_8px_#ef4444]" />
+                Disrupted
+              </span>
+              <span className="flex items-center gap-1 text-emerald-400">
+                <span className="w-3 h-1 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
+                Bypass Route
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5 text-[11px] font-bold pt-0.5">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-950/60 border border-emerald-600/40 text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
+                <span>&ge;60% Safe</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-950/60 border border-amber-600/40 text-amber-400">
+                <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b]" />
+                <span>30-59% Warn</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-rose-950/60 border border-rose-600/40 text-rose-400">
+                <span className="w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_8px_#ef4444]" />
+                <span>&lt;30% Risk</span>
+              </div>
+            </div>
+
+            {hoveredNode && (
+              <div className="mt-2 pt-2 border-t border-slate-700/60 flex items-center justify-between text-xs">
+                <div className="font-extrabold text-white flex items-center gap-1.5">
+                  {getNodeIcon(hoveredNode.node_type)}
+                  <span>{hoveredNode.name}</span>
+                </div>
+                <span className="text-slate-400 font-mono text-[11px]">
+                  {hoveredNode.city}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Bottom-Right: Viewport Controls & Highway Conduit Toggles */}
-      <div className="absolute bottom-3 right-3 z-20 pointer-events-auto flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/80 shadow-xl text-white">
-        {/* Toggle 3D Flow Conduits */}
-        <button
-          type="button"
-          onClick={() => setShowFlowConduits(!showFlowConduits)}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-            showFlowConduits
-              ? 'bg-sky-600 text-white'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-          title="Toggle 3D Highway Flow Conduits & Bypasses"
-        >
-          <Route className="w-3.5 h-3.5" />
-          <span>Highways</span>
-        </button>
+      {showViewportControls && (
+        <div className="absolute bottom-3 right-3 z-20 pointer-events-auto flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/80 shadow-xl text-white">
+          {/* Toggle 3D Flow Conduits */}
+          <button
+            type="button"
+            onClick={() => setShowFlowConduits(!showFlowConduits)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              showFlowConduits
+                ? 'bg-sky-600 text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Toggle 3D Highway Flow Conduits & Bypasses"
+          >
+            <Route className="w-3.5 h-3.5" />
+            <span>Highways</span>
+          </button>
 
-        {/* Toggle Shockwaves */}
-        <button
-          type="button"
-          onClick={() => setShowShockwaves(!showShockwaves)}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-            showShockwaves
-              ? 'bg-rose-600 text-white'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-          title="Toggle Volumetric Disruption Shockwave"
-        >
-          <Radio className="w-3.5 h-3.5" />
-          <span>Shockwave</span>
-        </button>
+          {/* Toggle Shockwaves */}
+          <button
+            type="button"
+            onClick={() => setShowShockwaves(!showShockwaves)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              showShockwaves
+                ? 'bg-rose-600 text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Toggle Volumetric Disruption Shockwave"
+          >
+            <Radio className="w-3.5 h-3.5" />
+            <span>Shockwave</span>
+          </button>
 
-        {/* Toggle 3D Buildings */}
-        <button
-          type="button"
-          onClick={handleToggleBuildings}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-            showBuildings
-              ? 'bg-blue-600/80 text-white'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-          title="Toggle Photorealistic 3D OSM Buildings"
-        >
-          <Building2 className="w-3.5 h-3.5" />
-          <span>3D Mesh</span>
-        </button>
+          {/* Toggle 3D Buildings */}
+          <button
+            type="button"
+            onClick={handleToggleBuildings}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              showBuildings
+                ? 'bg-blue-600/80 text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Toggle Photorealistic 3D OSM Buildings"
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span>3D Mesh</span>
+          </button>
 
-        {/* Reset Camera */}
-        <button
-          type="button"
-          onClick={() => flyToPreset('CORRIDOR_OVERVIEW')}
-          className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-          title="Reset Camera to Corridor Overview"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
-      </div>
+          {/* Reset Camera */}
+          <button
+            type="button"
+            onClick={() => flyToPreset('CORRIDOR_OVERVIEW')}
+            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            title="Reset Camera to Corridor Overview"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Fallback Setup Guide Modal (Displayed if Ion token is not present) */}
       {tokenMissing && (
@@ -991,4 +1018,6 @@ export default function CesiumTwinViewport({
       )}
     </div>
   );
-}
+});
+
+export default CesiumTwinViewport;

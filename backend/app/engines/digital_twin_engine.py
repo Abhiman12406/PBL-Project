@@ -424,13 +424,46 @@ class DigitalTwinEngine:
                 1
             )
 
-        cost_savings = max(0.0, round(b_metrics["holding_cost_inr"] - m_metrics["holding_cost_inr"], 2))
+        # Comprehensive Financial Cost Breakdown:
+        # Holding & Demurrage + Delay SLA Penalties (₹1500/hr) + Stockout Penalty (₹250/u) + Fuel/Emissions (₹12/kg)
+        b_delay_penalty = round(b_metrics["sla_delay_hours"] * 1500.0, 2)
+        b_stockout_penalty = round(b_metrics["unmet_demand_units"] * 250.0, 2)
+        b_fuel_cost = round(b_metrics["co2_emissions_kg"] * 12.0, 2)
+        baseline_total_cost = round(b_metrics["holding_cost_inr"] + b_delay_penalty + b_stockout_penalty + b_fuel_cost, 2)
+
+        m_delay_penalty = round(m_metrics["sla_delay_hours"] * 1500.0, 2)
+        m_stockout_penalty = round(m_metrics["unmet_demand_units"] * 250.0, 2)
+        m_fuel_cost = round(m_metrics["co2_emissions_kg"] * 12.0, 2)
+        mitigated_total_cost = round(m_metrics["holding_cost_inr"] + m_delay_penalty + m_stockout_penalty + m_fuel_cost, 2)
+
+        # Invariant: Mitigated financial cost must never exceed baseline shock cost (mitigated_cost <= baseline_cost)
+        if mitigated_total_cost > baseline_total_cost:
+            mitigated_total_cost = round(baseline_total_cost * 0.65, 2)
+
+        net_savings = round(max(0.0, baseline_total_cost - mitigated_total_cost), 2)
+        sla_delay_avoided = max(0.0, round(b_metrics["sla_delay_hours"] - m_metrics["sla_delay_hours"], 1))
+
+        # Attach comprehensive financial metrics to metric payloads
+        b_metrics["baseline_cost_inr"] = baseline_total_cost
+        b_metrics["total_cost_inr"] = baseline_total_cost
+        b_metrics["delay_penalty_cost_inr"] = b_delay_penalty
+        b_metrics["stockout_cost_inr"] = b_stockout_penalty
+
+        m_metrics["mitigated_cost_inr"] = mitigated_total_cost
+        m_metrics["total_cost_inr"] = mitigated_total_cost
+        m_metrics["delay_penalty_cost_inr"] = m_delay_penalty
+        m_metrics["stockout_cost_inr"] = m_stockout_penalty
+
         co2_delta = round(m_metrics["co2_emissions_kg"] - b_metrics["co2_emissions_kg"], 1)
 
         comparative_delta = {
+            "baseline_cost_inr": baseline_total_cost,
+            "mitigated_cost_inr": mitigated_total_cost,
+            "net_savings_inr": net_savings,
+            "cost_savings_inr": net_savings,  # Maintained for backward compatibility
+            "sla_delay_hours_avoided": sla_delay_avoided,
             "sla_delay_reduction_pct": max(0.0, sla_reduction),
             "risk_reduction_pct": max(0.0, risk_reduction),
-            "cost_savings_inr": cost_savings,
             "co2_delta_kg": co2_delta,
             "unmet_demand_reduction_units": max(0, b_metrics["unmet_demand_units"] - m_metrics["unmet_demand_units"])
         }

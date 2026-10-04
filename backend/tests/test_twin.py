@@ -122,6 +122,18 @@ def test_metric_calculation_consistency():
     assert "cost_savings_inr" in delta
     assert delta["sla_delay_reduction_pct"] >= 0.0
 
+    # Financial impact invariant assertions (mitigated_cost <= baseline_cost)
+    assert "baseline_cost_inr" in delta
+    assert "mitigated_cost_inr" in delta
+    assert "net_savings_inr" in delta
+    assert "sla_delay_hours_avoided" in delta
+    assert delta["mitigated_cost_inr"] <= delta["baseline_cost_inr"], (
+        f"Mitigated cost {delta['mitigated_cost_inr']} exceeds baseline cost {delta['baseline_cost_inr']}"
+    )
+    assert delta["net_savings_inr"] >= 0.0
+    assert abs(delta["net_savings_inr"] - (delta["baseline_cost_inr"] - delta["mitigated_cost_inr"])) < 0.05
+    assert delta["sla_delay_hours_avoided"] >= 0.0
+
 
 @pytest.mark.asyncio
 async def test_api_simulate_scenario_endpoint():

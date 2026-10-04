@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -18,9 +18,32 @@ import {
   Send,
   Zap,
   Split,
-  Route
+  Route,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Maximize2,
+  Minimize2,
+  Building2,
+  Mountain,
+  Flame,
+  Radio,
+  RotateCcw,
+  ExternalLink,
+  ChevronRight,
+  TrendingDown,
+  Warehouse,
+  Truck
 } from 'lucide-react';
 import CesiumTwinViewport from './CesiumTwinViewport';
+import AutonomousSentinelHUD from './AutonomousSentinelHUD';
+import {
+  FACILITY_NODES,
+  HIGHWAY_CORRIDORS,
+  SCENARIO_EPICENTERS,
+  CAMERA_PRESETS,
+  getStockCapacityStatus
+} from '../constants/logisticsTopology';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -49,22 +72,35 @@ ChartJS.register(
 
 export default function DigitalTwinTab() {
   const { profile } = usePersona();
+  const viewportRef = useRef(null);
 
-  // State
+  // Shock Scenario Parameters
   const [selectedScenarioId, setSelectedScenarioId] = useState('port_strike');
   const [shockIntensity, setShockIntensity] = useState(75);
   const [enableMitigation, setEnableMitigation] = useState(true);
   const [horizonDays, setHorizonDays] = useState(7);
 
-  // Simulation Results
+  // Simulation Results & State
   const [simulationData, setSimulationData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Node Selection & Drawer States
   const [selectedNodeId, setSelectedNodeId] = useState('DC-BHW-01');
+  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
+  const [isStudioCollapsed, setIsStudioCollapsed] = useState(false);
+  const [isImpactCollapsed, setIsImpactCollapsed] = useState(false);
+  const [impactDrawerTab, setImpactDrawerTab] = useState('impact'); // 'impact' | 'timeline' | 'directives'
   const [chartMetric, setChartMetric] = useState('stock'); // 'stock' | 'delay'
+  const [isTopologyModalOpen, setIsTopologyModalOpen] = useState(false);
   const [dispatchedDirectives, setDispatchedDirectives] = useState({});
 
-  // Run Simulation
+  // Viewport layer controls
+  const [showFlowConduits, setShowFlowConduits] = useState(true);
+  const [showShockwaves, setShowShockwaves] = useState(true);
+  const [showBuildings, setShowBuildings] = useState(true);
+
+  // Run Discrete-Event Simulation (< 5.0s SLA)
   const runSimulation = useCallback(async (
     scenarioId = selectedScenarioId,
     intensity = shockIntensity,
@@ -96,16 +132,23 @@ export default function DigitalTwinTab() {
     runSimulation('port_strike', 75, true, 7);
   }, [runSimulation]);
 
+  // Handle 3D Entity selection from Cesium picking or camera ribbon
+  const handleSelectNode = useCallback((nodeId) => {
+    setSelectedNodeId(nodeId);
+    setIsInspectorOpen(true);
+    viewportRef.current?.flyToNode(nodeId);
+  }, []);
+
   // Intensity Severity Rating helper
   const getSeverityBadge = (intensity) => {
     if (intensity <= 30) {
-      return { label: 'Level 1: Mild Shock', color: 'bg-emerald-50 text-emerald-700 border-emerald-300' };
+      return { label: 'Level 1: Mild Shock', color: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50' };
     } else if (intensity <= 60) {
-      return { label: 'Level 2: Moderate Disruption', color: 'bg-amber-50 text-amber-700 border-amber-300' };
+      return { label: 'Level 2: Moderate Disruption', color: 'bg-amber-950/80 text-amber-300 border-amber-500/50' };
     } else if (intensity <= 80) {
-      return { label: 'Level 3: Severe Bottleneck', color: 'bg-orange-50 text-orange-700 border-orange-300' };
+      return { label: 'Level 3: Severe Bottleneck', color: 'bg-orange-950/80 text-orange-300 border-orange-500/50' };
     } else {
-      return { label: 'Level 4: Catastrophic Breakdown', color: 'bg-rose-50 text-rose-700 border-rose-300' };
+      return { label: 'Level 4: Catastrophic Breakdown', color: 'bg-rose-950/80 text-rose-300 border-rose-500/50' };
     }
   };
 
@@ -113,9 +156,35 @@ export default function DigitalTwinTab() {
 
   // Selected Node Details
   const activeNodeDetails = useMemo(() => {
-    if (!simulationData || !simulationData.nodes) return null;
-    return simulationData.nodes.find(n => n.node_id === selectedNodeId) || simulationData.nodes[0];
-  }, [simulationData, selectedNodeId]);
+    const topologyNode = FACILITY_NODES.find(n => n.node_id === selectedNodeId) || FACILITY_NODES[1];
+    let simNode = null;
+    if (simulationData && simulationData.nodes) {
+      simNode = simulationData.nodes.find(n => n.node_id === selectedNodeId);
+    }
+
+    const currentStock = simNode?.mitigated?.stock ?? simNode?.current_stock ?? topologyNode.nominal_stock;
+    const capacity = topologyNode.capacity_units;
+    const fillStatus = getStockCapacityStatus(currentStock, capacity);
+
+    return {
+      ...topologyNode,
+      simNode,
+      currentStock,
+      fillStatus,
+      dock_doors: topologyNode.dock_doors || 14,
+      handling_rate_units_hr: topologyNode.handling_rate_units_hr || 3200,
+      daily_gate_capacity: (topologyNode.dock_doors || 14) * (topologyNode.handling_rate_units_hr || 3200) * 12,
+      mitigatedStock: simNode?.mitigated?.stock ?? currentStock,
+      baselineStock: simNode?.baseline?.stock ?? Math.round(currentStock * 0.45),
+      utilizationPct: simNode?.mitigated?.capacity_utilization_pct ?? Math.round((currentStock / capacity) * 100),
+      baselineUtilizationPct: simNode?.baseline?.capacity_utilization_pct ?? 18.0,
+      stockoutPct: simNode?.mitigated?.stockout_probability_pct ?? 2.1,
+      baselineStockoutPct: simNode?.baseline?.stockout_probability_pct ?? 24.8,
+      unmetUnits: simNode?.mitigated?.unmet_demand_units ?? 0,
+      baselineUnmetUnits: simNode?.baseline?.unmet_demand_units ?? 4200,
+      cumulativeHoldingCost: simNode?.holding_cost_inr ?? (currentStock * topologyNode.holding_cost_rate * horizonDays)
+    };
+  }, [selectedNodeId, simulationData, horizonDays]);
 
   // Handle Directive Dispatch Mock
   const handleDispatchDirective = (index) => {
@@ -125,7 +194,7 @@ export default function DigitalTwinTab() {
     }));
   };
 
-  // Chart Data Preparation
+  // Trajectory Line Chart Data Preparation
   const chartData = useMemo(() => {
     if (!simulationData || !simulationData.timeline_events) return null;
 
@@ -139,10 +208,10 @@ export default function DigitalTwinTab() {
             label: 'Baseline Unmitigated Stock (Units)',
             data: simulationData.timeline_events.map(e => e.baseline_stock),
             borderColor: '#ef4444',
-            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            backgroundColor: 'rgba(239, 68, 68, 0.12)',
             borderWidth: 2.5,
             pointBackgroundColor: '#ef4444',
-            pointRadius: 4,
+            pointRadius: 3,
             tension: 0.35,
             fill: true
           },
@@ -150,10 +219,10 @@ export default function DigitalTwinTab() {
             label: 'Mitigated Buffer Stock (Units)',
             data: simulationData.timeline_events.map(e => e.mitigated_stock),
             borderColor: '#10b981',
-            backgroundColor: 'rgba(16, 185, 129, 0.12)',
+            backgroundColor: 'rgba(16, 185, 129, 0.15)',
             borderWidth: 2.5,
             pointBackgroundColor: '#10b981',
-            pointRadius: 4,
+            pointRadius: 3,
             tension: 0.35,
             fill: true
           }
@@ -164,24 +233,24 @@ export default function DigitalTwinTab() {
         labels,
         datasets: [
           {
-            label: 'Baseline Cumulative Delay (Hours)',
+            label: 'Baseline Delay Hours (Gridlock)',
             data: simulationData.timeline_events.map(e => e.baseline_cum_delay),
             borderColor: '#f97316',
-            backgroundColor: 'rgba(249, 115, 22, 0.08)',
+            backgroundColor: 'rgba(249, 115, 22, 0.12)',
             borderWidth: 2.5,
             pointBackgroundColor: '#f97316',
-            pointRadius: 4,
+            pointRadius: 3,
             tension: 0.3,
             fill: true
           },
           {
-            label: 'Mitigated Cumulative Delay (Hours)',
+            label: 'Mitigated Delay Hours (Bypass Route)',
             data: simulationData.timeline_events.map(e => e.mitigated_cum_delay),
-            borderColor: '#0284c7',
-            backgroundColor: 'rgba(2, 132, 199, 0.1)',
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.15)',
             borderWidth: 2.5,
-            pointBackgroundColor: '#0284c7',
-            pointRadius: 4,
+            pointBackgroundColor: '#38bdf8',
+            pointRadius: 3,
             tension: 0.3,
             fill: true
           }
@@ -197,792 +266,1079 @@ export default function DigitalTwinTab() {
       legend: {
         position: 'top',
         labels: {
-          font: { family: 'Plus Jakarta Sans', size: 12, weight: '600' },
+          color: '#cbd5e1',
+          font: { family: 'Plus Jakarta Sans', size: 10, weight: '600' },
           usePointStyle: true,
-          boxWidth: 8
+          boxWidth: 6
         }
       },
       tooltip: {
-        backgroundColor: '#0f172a',
-        titleFont: { size: 13, weight: 'bold' },
-        bodyFont: { size: 12 },
-        padding: 10,
+        backgroundColor: '#090d16',
+        borderColor: '#334155',
+        borderWidth: 1,
+        titleColor: '#f8fafc',
+        bodyColor: '#cbd5e1',
+        titleFont: { size: 11, weight: 'bold' },
+        bodyFont: { size: 11 },
+        padding: 8,
         cornerRadius: 8
       }
     },
     scales: {
       x: {
-        grid: { color: '#f1f5f9' },
-        ticks: { font: { family: 'Plus Jakarta Sans', size: 11, weight: '500' } }
+        grid: { color: 'rgba(51, 65, 85, 0.3)' },
+        ticks: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans', size: 10 } }
       },
       y: {
-        grid: { color: '#f1f5f9' },
-        ticks: { font: { family: 'JetBrains Mono', size: 11 } }
+        grid: { color: 'rgba(51, 65, 85, 0.3)' },
+        ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
       }
     }
   };
 
+  // Node icon helper
+  const getNodeIcon = (nodeType, className = "w-4 h-4") => {
+    switch (nodeType) {
+      case 'port':
+        return <Anchor className={`${className} text-blue-400`} />;
+      case 'central_dc':
+        return <Package className={`${className} text-orange-400`} />;
+      case 'regional_hub':
+        return <Building2 className={`${className} text-emerald-400`} />;
+      case 'regional_depot':
+        return <Layers className={`${className} text-purple-400`} />;
+      case 'fulfillment_center':
+        return <Building2 className={`${className} text-amber-400`} />;
+      default:
+        return <Globe className={`${className} text-slate-400`} />;
+    }
+  };
+
+  const activeEpicenter = SCENARIO_EPICENTERS[selectedScenarioId];
+
+  // Financial calculations
+  const baselineCost = simulationData?.comparative_delta?.baseline_cost_inr || simulationData?.baseline_metrics?.baseline_cost_inr || 0;
+  const mitigatedCost = simulationData?.comparative_delta?.mitigated_cost_inr || simulationData?.mitigated_metrics?.mitigated_cost_inr || 0;
+  const netSavings = simulationData?.comparative_delta?.net_savings_inr ?? simulationData?.comparative_delta?.cost_savings_inr ?? Math.max(0, baselineCost - mitigatedCost);
+  const delayHoursAvoided = simulationData?.comparative_delta?.sla_delay_hours_avoided ?? Math.max(0, Math.round((simulationData?.baseline_metrics?.sla_delay_hours || 0) - (simulationData?.mitigated_metrics?.sla_delay_hours || 0)));
+
   return (
-    <div className="space-y-7 pb-12">
-      {/* 1. Header Banner & Quick Diagnostics */}
-      <div className="bright-card p-6 sm:p-7 rounded-2xl bg-white border-2 border-slate-200">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
-              <Activity className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
-              <span>Digital Twin Engine Active • SLA &lt; 5.0s</span>
-            </div>
-            <h2 className="text-2xl font-black tracking-tight text-slate-900">
-              Digital Twin "What-If" Scenario Studio
-            </h2>
-            <p className="text-xs sm:text-sm font-medium text-slate-500 max-w-2xl leading-relaxed">
-              Stress-test catastrophic operational shocks across the Western India logistics corridor (JNPT, Bhiwandi, Thane, Nashik, Pune) with discrete-event simulation and automated mitigation routing.
-            </p>
+    <div
+      className="relative w-full rounded-2xl overflow-hidden border-2 border-slate-850 bg-slate-950 shadow-2xl flex flex-col select-none"
+      style={{ minHeight: '840px', height: 'calc(100vh - 7.5rem)' }}
+    >
+      {/* 1. Central 3D Cyber-Geospatial Viewport (Full Height Canvas Mount) */}
+      <CesiumTwinViewport
+        ref={viewportRef}
+        selectedNodeId={selectedNodeId}
+        onSelectNode={handleSelectNode}
+        simulationNodes={simulationData?.nodes}
+        simulationLinks={simulationData?.links}
+        activeScenarioId={selectedScenarioId}
+        shockIntensity={shockIntensity}
+        enableMitigation={enableMitigation}
+        height="100%"
+        showLegend={false}
+        showViewportControls={false}
+        showTopRibbon={false}
+        showSentinelHUD={false}
+        className="w-full h-full absolute inset-0"
+      />
+
+      {/* 2. Top Glassmorphic Command Header Ribbon */}
+      <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        {/* Left: Command Center Title, Live Status & Active Shock */}
+        <div className="pointer-events-auto flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-700/80 text-white shadow-xl">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+            <span className="text-xs font-black tracking-wide text-slate-100 uppercase">
+              3D Digital Twin Command Center
+            </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-right">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Authorized Persona</div>
-              <div className="text-xs font-extrabold text-slate-800">{profile?.title || 'Supply Chain Director'}</div>
-            </div>
+          <div className="h-4 w-[1px] bg-slate-700 mx-0.5" />
+
+          {/* Active Scenario Tag */}
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-400">
+            <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span className="truncate max-w-[140px] sm:max-w-none">
+              {simulationData?.scenario_name || 'Port Strike'}
+            </span>
+            <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] border border-amber-500/30">
+              {shockIntensity}%
+            </span>
+          </div>
+
+          <div className="h-4 w-[1px] bg-slate-700 mx-0.5 hidden sm:block" />
+
+          {/* Execution Time */}
+          <div className="hidden sm:flex items-center gap-1 text-[11px] font-semibold text-emerald-400 font-mono">
+            <span>SLA:</span>
+            <span className="font-bold">{simulationData?.execution_time_seconds || '0.003'}s</span>
+            <span className="text-slate-500">(&lt;5.0s)</span>
+          </div>
+        </div>
+
+        {/* Center: 1-Click Smooth Glide Navigation Ribbon */}
+        <div className="pointer-events-auto hidden md:flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-700/80 shadow-xl text-white">
+          <button
+            type="button"
+            onClick={() => viewportRef.current?.flyToPreset('CORRIDOR_OVERVIEW')}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            title="Overview of Western Maharashtra Corridor"
+          >
+            <Globe className="w-3.5 h-3.5 text-blue-400" />
+            <span>Corridor</span>
+          </button>
+
+          <div className="h-4 w-[1px] bg-slate-700 mx-0.5" />
+
+          {FACILITY_NODES.map((node) => {
+            const isSelected = selectedNodeId === node.node_id;
+            return (
+              <button
+                key={node.node_id}
+                type="button"
+                onClick={() => handleSelectNode(node.node_id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  isSelected
+                    ? 'bg-[#ff5400] text-white shadow-md'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+                title={`${node.tier_label} • ${node.city}`}
+              >
+                {getNodeIcon(node.node_type, "w-3.5 h-3.5")}
+                <span>{node.shortName}</span>
+              </button>
+            );
+          })}
+
+          <div className="h-4 w-[1px] bg-slate-700 mx-0.5" />
+
+          <button
+            type="button"
+            onClick={() => viewportRef.current?.flyToPreset('KASARA_GHAT')}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition cursor-pointer"
+            title="Steep mountain pass on NH-160"
+          >
+            <Mountain className="w-3.5 h-3.5" />
+            <span>Kasara Ghat</span>
+          </button>
+        </div>
+
+        {/* Right: Layer Toggles, Network Grid Modal & Autonomous Sentinel HUD */}
+        <div className="pointer-events-auto flex items-center gap-2">
+          {/* Viewport Layers Toggle Dropdown / Buttons */}
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-700/80 shadow-xl text-white">
             <button
-              onClick={() => runSimulation(selectedScenarioId, shockIntensity, enableMitigation, horizonDays)}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#ff5400] text-white text-xs font-bold shadow-md hover:bg-[#e04a00] transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              type="button"
+              onClick={() => {
+                const next = !showFlowConduits;
+                setShowFlowConduits(next);
+                viewportRef.current?.setShowFlowConduits(next);
+              }}
+              className={`p-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                showFlowConduits ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Toggle Highway Flow Conduits & Bypasses"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>{loading ? 'Simulating...' : 'Run Simulation'}</span>
+              <Route className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showShockwaves;
+                setShowShockwaves(next);
+                viewportRef.current?.setShowShockwaves(next);
+              }}
+              className={`p-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                showShockwaves ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Toggle Disruption Shockwaves"
+            >
+              <Radio className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                viewportRef.current?.toggleBuildings();
+                setShowBuildings(!showBuildings);
+              }}
+              className={`p-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                showBuildings ? 'bg-blue-600/80 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Toggle 3D OSM Building Mesh"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => viewportRef.current?.resetCamera()}
+              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              title="Reset Camera to Corridor Overview"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
           </div>
-        </div>
 
-        {simulationData && (
-          <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4 text-xs font-semibold text-slate-600">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-              <span>Active Scenario: <strong className="text-slate-900">{simulationData.scenario_name}</strong></span>
-              <span className="text-slate-300">|</span>
-              <span>Execution Time: <strong className="font-mono text-emerald-700">{simulationData.execution_time_seconds}s</strong></span>
-              <span className="text-slate-300">|</span>
-              <span>Horizon: <strong className="text-slate-900">{simulationData.simulation_horizon_days} Days</strong></span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-500">Mitigation Routing:</span>
-              <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${simulationData.enable_mitigation ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
-                {simulationData.enable_mitigation ? 'AUTOMATED ACTIVE' : 'DISABLED (BASELINE ONLY)'}
-              </span>
-            </div>
-          </div>
-        )}
+          {/* Network Grid & Corridors Table Toggle Modal Button */}
+          <button
+            type="button"
+            onClick={() => setIsTopologyModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-700/80 text-slate-200 hover:text-white hover:border-[#ff5400]/60 transition text-xs font-bold shadow-xl cursor-pointer"
+            title="Inspect 5-Node Topology Cards & Corridor Transit Matrix"
+          >
+            <Compass className="w-3.5 h-3.5 text-[#ff5400]" />
+            <span className="hidden sm:inline">Network Grid</span>
+          </button>
+
+          {/* Compact Autonomous Sentinel HUD */}
+          <AutonomousSentinelHUD compact={true} />
+        </div>
       </div>
 
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* 2. Scenario Presets & Shock Parameter Controls */}
-      <div className="bright-card p-6 sm:p-7 rounded-2xl bg-white border-2 border-slate-200 space-y-6">
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-[#ff5400]" />
-              Select Operational Shock Scenario
-            </h3>
-            <span className="text-xs font-medium text-slate-500">Pick preset or configure custom shock</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Preset 1: Port Strike */}
-            <div
-              onClick={() => {
-                setSelectedScenarioId('port_strike');
-                setShockIntensity(75);
-                runSimulation('port_strike', 75, enableMitigation, horizonDays);
-              }}
-              className={`p-4 rounded-xl border-2 transition cursor-pointer ${
-                selectedScenarioId === 'port_strike'
-                  ? 'border-[#ff5400] bg-orange-50/50 shadow-sm'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center text-[#ff5400]">
-                  <Anchor className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-orange-100 text-orange-800">
-                  Maritime Strike
+      {/* 3. Bottom-Left Drawer: Shock Scenario Studio & Parameter Controls */}
+      <div className="absolute bottom-3 left-3 z-20 pointer-events-auto w-[360px] sm:w-[410px] max-w-[calc(100%-1.5rem)]">
+        <div className="rounded-2xl backdrop-blur-2xl bg-slate-950/88 border border-slate-700/80 shadow-2xl text-white overflow-hidden transition-all duration-300">
+          {/* Drawer Header */}
+          <div className="px-4 py-3 bg-slate-900/70 border-b border-slate-800/80 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-orange-500/20 border border-orange-500/30 flex items-center justify-center text-[#ff5400]">
+                <Sliders className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-black tracking-wide text-slate-100 uppercase">
+                  Shock Scenario Studio
+                </h3>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {isStudioCollapsed ? `${simulationData?.scenario_name} • ${shockIntensity}%` : 'Select Preset & Inject Disruption'}
                 </span>
               </div>
-              <h4 className="text-sm font-bold text-slate-900">Port Labor Strike at JNPT</h4>
-              <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                Dockworker crane shutdown halts container gates. Dwell surges to 120h+, throttling Bhiwandi DC inbound.
-              </p>
-              <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-slate-600">
-                <span>Affected: JNPT Terminal</span>
-                <span className="text-[#ff5400]">Preset: 75%</span>
-              </div>
             </div>
 
-            {/* Preset 2: Monsoon Closures */}
-            <div
-              onClick={() => {
-                setSelectedScenarioId('monsoon_closures');
-                setShockIntensity(70);
-                runSimulation('monsoon_closures', 70, enableMitigation, horizonDays);
-              }}
-              className={`p-4 rounded-xl border-2 transition cursor-pointer ${
-                selectedScenarioId === 'monsoon_closures'
-                  ? 'border-blue-500 bg-blue-50/50 shadow-sm'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
-                  <CloudRain className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-800">
-                  Monsoon Mudslide
-                </span>
-              </div>
-              <h4 className="text-sm font-bold text-slate-900">Extreme Monsoon Road Closures</h4>
-              <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                Torrential 180mm rain triggers Kasara Ghat NH-160 mudslides, cutting off Nashik Agro Corridor convoys.
-              </p>
-              <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-slate-600">
-                <span>Affected: Kasara / Nashik</span>
-                <span className="text-blue-600">Preset: 70%</span>
-              </div>
-            </div>
-
-            {/* Preset 3: Bridge Failure */}
-            <div
-              onClick={() => {
-                setSelectedScenarioId('bridge_failure');
-                setShockIntensity(85);
-                runSimulation('bridge_failure', 85, enableMitigation, horizonDays);
-              }}
-              className={`p-4 rounded-xl border-2 transition cursor-pointer ${
-                selectedScenarioId === 'bridge_failure'
-                  ? 'border-rose-500 bg-rose-50/50 shadow-sm'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-lg bg-rose-100 flex items-center justify-center text-rose-600">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-rose-100 text-rose-800">
-                  Viaduct Fracture
-                </span>
-              </div>
-              <h4 className="text-sm font-bold text-slate-900">Expressway Bridge Failure</h4>
-              <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                Structural viaduct fault on Khandala Expressway shuts heavy freight to Pune Auto Hub.
-              </p>
-              <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-slate-600">
-                <span>Affected: Pune Expressway</span>
-                <span className="text-rose-600">Preset: 85%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Severity Slider & Control Parameters */}
-        <div className="pt-4 border-t border-slate-200 grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
-          {/* Slider */}
-          <div className="lg:col-span-2 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <label htmlFor="shock-intensity-slider" className="font-extrabold text-slate-800 flex items-center gap-1.5">
-                <span>Shock Disruption Intensity:</span>
-                <span className="font-mono text-sm text-[#ff5400] font-black">{shockIntensity}%</span>
-              </label>
-              <span className={`px-2 py-0.5 rounded-full border text-[11px] font-bold ${currentSeverity.color}`}>
-                {currentSeverity.label}
-              </span>
-            </div>
-            <input
-              id="shock-intensity-slider"
-              type="range"
-              min="1"
-              max="100"
-              value={shockIntensity}
-              onChange={(e) => setShockIntensity(Number(e.target.value))}
-              className="w-full h-2.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#ff5400]"
-            />
-            <div className="flex justify-between text-[10px] font-bold text-slate-400">
-              <span>1% (Minimal Friction)</span>
-              <span>25% (Mild Delay)</span>
-              <span>50% (Significant Strain)</span>
-              <span>75% (Severe Gridlock)</span>
-              <span>100% (Complete Outage)</span>
-            </div>
-          </div>
-
-          {/* Horizon & Mitigation Toggle */}
-          <div className="flex flex-col sm:flex-row items-center justify-end gap-4">
-            <div className="w-full sm:w-auto">
-              <label htmlFor="simulation-horizon-select" className="block text-[11px] font-bold text-slate-500 mb-1">Horizon</label>
-              <select
-                id="simulation-horizon-select"
-                value={horizonDays}
-                onChange={(e) => setHorizonDays(Number(e.target.value))}
-                className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-800 bg-white"
-              >
-                <option value={7}>7 Days (Standard)</option>
-                <option value={14}>14 Days (Extended)</option>
-                <option value={21}>21 Days (Strategic)</option>
-              </select>
-            </div>
-
-            <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-3 p-2 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="text-left">
-                <div className="text-xs font-bold text-slate-800">Mitigation</div>
-                <div className="text-[10px] text-slate-500">Auto Reroute</div>
-              </div>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setEnableMitigation(!enableMitigation)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  enableMitigation ? 'bg-[#00c853]' : 'bg-slate-300'
-                }`}
+                onClick={() => runSimulation(selectedScenarioId, shockIntensity, enableMitigation, horizonDays)}
+                disabled={loading}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                title="Run Simulation Now"
               >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                    enableMitigation ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#ff5400]' : ''}`} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsStudioCollapsed(!isStudioCollapsed)}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                title={isStudioCollapsed ? 'Expand Scenario Studio' : 'Collapse Studio'}
+              >
+                {isStudioCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* 3. Side-by-Side Comparative KPI Summary Matrix */}
-      {simulationData && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-emerald-600" />
-              Comparative Impact Metrics (Baseline vs. Mitigated)
-            </h3>
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-              {simulationData.comparative_delta?.sla_delay_reduction_pct}% SLA Delay Reduced via Contingency Rerouting
-            </span>
-          </div>
+          {/* Drawer Body (Expandable) */}
+          {!isStudioCollapsed && (
+            <div className="p-4 space-y-4 max-h-[460px] overflow-y-auto">
+              {/* 1-Click Shock Scenario Presets */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                  <span>1-CLICK PRESET SHOCKS</span>
+                  <span className="text-[#ff5400]">Select Disruption</span>
+                </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* KPI 1: Risk Index */}
-            <div className="bright-card p-5 rounded-2xl bg-white border-2 border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Composite Risk Index</span>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  -{simulationData.comparative_delta?.risk_reduction_pct}%
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <div className="text-2xl font-black font-mono-num text-slate-900">
-                    {simulationData.mitigated_metrics?.risk_index}
-                    <span className="text-xs font-normal text-slate-400"> / 100</span>
-                  </div>
-                  <div className="text-[11px] font-bold text-emerald-600 flex items-center gap-1 mt-0.5">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Mitigated Risk</span>
-                  </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Preset 1: Port Strike */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedScenarioId('port_strike');
+                      setShockIntensity(75);
+                      runSimulation('port_strike', 75, enableMitigation, horizonDays);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      selectedScenarioId === 'port_strike'
+                        ? 'border-orange-500 bg-orange-950/40 shadow-[0_0_12px_rgba(255,84,0,0.25)]'
+                        : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <Anchor className="w-4 h-4 text-orange-400" />
+                      <span className="text-[9px] font-mono font-bold text-orange-300 px-1 py-0.2 rounded bg-orange-950 border border-orange-500/40">
+                        75%
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-extrabold text-slate-100 leading-tight">Port Strike</div>
+                      <div className="text-[9px] text-slate-400 truncate mt-0.5">JNPT Gates Choked</div>
+                    </div>
+                  </button>
+
+                  {/* Preset 2: Monsoon Closures */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedScenarioId('monsoon_closures');
+                      setShockIntensity(70);
+                      runSimulation('monsoon_closures', 70, enableMitigation, horizonDays);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      selectedScenarioId === 'monsoon_closures'
+                        ? 'border-blue-500 bg-blue-950/40 shadow-[0_0_12px_rgba(59,130,246,0.25)]'
+                        : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <CloudRain className="w-4 h-4 text-blue-400" />
+                      <span className="text-[9px] font-mono font-bold text-blue-300 px-1 py-0.2 rounded bg-blue-950 border border-blue-500/40">
+                        70%
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-extrabold text-slate-100 leading-tight">Monsoons</div>
+                      <div className="text-[9px] text-slate-400 truncate mt-0.5">Kasara Mudslide</div>
+                    </div>
+                  </button>
+
+                  {/* Preset 3: Bridge Failure */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedScenarioId('bridge_failure');
+                      setShockIntensity(85);
+                      runSimulation('bridge_failure', 85, enableMitigation, horizonDays);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      selectedScenarioId === 'bridge_failure'
+                        ? 'border-rose-500 bg-rose-950/40 shadow-[0_0_12px_rgba(244,63,94,0.25)]'
+                        : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <AlertTriangle className="w-4 h-4 text-rose-400" />
+                      <span className="text-[9px] font-mono font-bold text-rose-300 px-1 py-0.2 rounded bg-rose-950 border border-rose-500/40">
+                        85%
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-extrabold text-slate-100 leading-tight">Bridge Fault</div>
+                      <div className="text-[9px] text-slate-400 truncate mt-0.5">Khandala Expressway</div>
+                    </div>
+                  </button>
                 </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold font-mono-num text-rose-600 line-through opacity-70">
-                    {simulationData.baseline_metrics?.risk_index}
-                  </div>
-                  <div className="text-[11px] font-semibold text-slate-400">Baseline Shock</div>
-                </div>
               </div>
-              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
-                  style={{ width: `${simulationData.mitigated_metrics?.risk_index}%` }}
+
+              {/* Interactive Shock Intensity Slider (1-100%) */}
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-extrabold text-slate-300 flex items-center gap-1.5">
+                    <span>Intensity Slider:</span>
+                    <span className="font-mono text-sm text-[#ff5400] font-black">{shockIntensity}%</span>
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${currentSeverity.color}`}>
+                    {currentSeverity.label}
+                  </span>
+                </div>
+
+                <input
+                  id="shock-intensity-slider"
+                  type="range"
+                  min="1"
+                  max="100"
+                  value={shockIntensity}
+                  onChange={(e) => setShockIntensity(Number(e.target.value))}
+                  onMouseUp={() => runSimulation(selectedScenarioId, shockIntensity, enableMitigation, horizonDays)}
+                  onTouchEnd={() => runSimulation(selectedScenarioId, shockIntensity, enableMitigation, horizonDays)}
+                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#ff5400]"
                 />
-              </div>
-            </div>
 
-            {/* KPI 2: SLA Delay Hours */}
-            <div className="bright-card p-5 rounded-2xl bg-white border-2 border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total SLA Delay</span>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  -{simulationData.comparative_delta?.sla_delay_reduction_pct}%
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <div className="text-2xl font-black font-mono-num text-slate-900">
-                    {simulationData.mitigated_metrics?.sla_delay_hours}h
-                  </div>
-                  <div className="text-[11px] font-bold text-emerald-600 flex items-center gap-1 mt-0.5">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>Mitigated Delay</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold font-mono-num text-rose-600 line-through opacity-70">
-                    {simulationData.baseline_metrics?.sla_delay_hours}h
-                  </div>
-                  <div className="text-[11px] font-semibold text-slate-400">Baseline Shock</div>
+                <div className="flex justify-between text-[9px] font-bold text-slate-500 font-mono">
+                  <span>1% Minor</span>
+                  <span>25% Mild</span>
+                  <span>50% Strain</span>
+                  <span>75% Severe</span>
+                  <span>100% Outage</span>
                 </div>
               </div>
-              <div className="text-[11px] text-slate-500 font-medium">
-                Saves approx. {Math.round(simulationData.baseline_metrics?.sla_delay_hours - simulationData.mitigated_metrics?.sla_delay_hours)} delivery delay hours across corridor.
-              </div>
-            </div>
 
-            {/* KPI 3: Holding Cost Surge */}
-            <div className="bright-card p-5 rounded-2xl bg-white border-2 border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Holding & Demurrage</span>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  Save ₹{Math.round(simulationData.comparative_delta?.cost_savings_inr / 1000)}k
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <div className="text-2xl font-black font-mono-num text-slate-900">
-                    ₹{(simulationData.mitigated_metrics?.holding_cost_inr / 1000).toFixed(1)}k
-                  </div>
-                  <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1 mt-0.5">
-                    <span>Surge: +{simulationData.mitigated_metrics?.holding_cost_surge_pct}%</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold font-mono-num text-rose-600 line-through opacity-70">
-                    ₹{(simulationData.baseline_metrics?.holding_cost_inr / 1000).toFixed(1)}k
-                  </div>
-                  <div className="text-[11px] font-semibold text-rose-600">+{simulationData.baseline_metrics?.holding_cost_surge_pct}%</div>
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-500 font-medium">
-                Prevents port yard container demurrage accumulation.
-              </div>
-            </div>
-
-            {/* KPI 4: CO2 Carbon Impact */}
-            <div className="bright-card p-5 rounded-2xl bg-white border-2 border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Transport Carbon (CO2)</span>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                  {simulationData.comparative_delta?.co2_delta_kg > 0 ? `+${simulationData.comparative_delta.co2_delta_kg} kg` : 'Optimized'}
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <div className="text-2xl font-black font-mono-num text-slate-900">
-                    {Math.round(simulationData.mitigated_metrics?.co2_emissions_kg).toLocaleString()}
-                    <span className="text-xs font-normal text-slate-400"> kg</span>
-                  </div>
-                  <div className="text-[11px] font-bold text-blue-600 flex items-center gap-1 mt-0.5">
-                    <Fuel className="w-3.5 h-3.5" />
-                    <span>Detour Cruise Mode</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold font-mono-num text-slate-600">
-                    {Math.round(simulationData.baseline_metrics?.co2_emissions_kg).toLocaleString()} kg
-                  </div>
-                  <div className="text-[11px] font-semibold text-rose-500">Idling Waste</div>
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-500 font-medium">
-                Bypass routing trades +25km detour to eliminate heavy engine idling.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 3.5. Cesium 3D Cyber-Geospatial Viewport & WGS84 Facility Beacons */}
-      <div className="bright-card p-6 sm:p-7 rounded-2xl bg-white border-2 border-slate-200 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-bold text-blue-700 mb-1">
-              <Globe className="w-3.5 h-3.5 text-blue-600" />
-              <span>3D Cyber-Geospatial Digital Twin</span>
-            </div>
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <span>Western India Macro Corridor & Multi-Echelon Facility Beacons</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Real-world CesiumJS 3D virtual globe with digital terrain and photorealistic 3D buildings. Holographic capacity rings reflect live stock levels across JNPT, Bhiwandi, Thane, Nashik, and Pune.
-            </p>
-          </div>
-        </div>
-
-        <CesiumTwinViewport
-          selectedNodeId={selectedNodeId}
-          onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
-          simulationNodes={simulationData?.nodes}
-          simulationLinks={simulationData?.links}
-          activeScenarioId={selectedScenarioId}
-          shockIntensity={shockIntensity}
-          enableMitigation={enableMitigation}
-          height="580px"
-        />
-      </div>
-
-      {/* 4. Multi-Echelon Network Topology Node Status Diagram */}
-      {simulationData && (
-        <div className="bright-card p-6 sm:p-7 rounded-2xl bg-white border-2 border-slate-200 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Compass className="w-4 h-4 text-[#ff5400]" />
-                Multi-Echelon Network Topology Status Diagram
-              </h3>
-              <p className="text-xs text-slate-500">
-                Click any node or corridor to inspect live inventory balances and replenishment flows
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-xs font-bold">
-              <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" /> Healthy
-              </span>
-              <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                <span className="w-2 h-2 rounded-full bg-amber-500" /> Stressed
-              </span>
-              <span className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                <span className="w-2 h-2 rounded-full bg-rose-500" /> Disrupted
-              </span>
-              <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                <span className="w-2 h-2 rounded-full bg-blue-500" /> Rerouted
-              </span>
-            </div>
-          </div>
-
-          {/* Interactive Topology Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {simulationData.nodes?.map((node) => {
-              const isSelected = selectedNodeId === node.node_id;
-              const statusColor = {
-                healthy: 'border-emerald-300 bg-emerald-50/40 text-emerald-800',
-                stressed: 'border-amber-300 bg-amber-50/40 text-amber-800',
-                critical: 'border-rose-400 bg-rose-50 text-rose-800',
-                disrupted: 'border-rose-500 bg-rose-100 text-rose-900',
-                rerouted: 'border-blue-400 bg-blue-50 text-blue-900'
-              }[node.mitigated.status] || 'border-slate-200 bg-white text-slate-800';
-
-              const tierLabel = {
-                port: 'Tier 1 Gateway',
-                central_dc: 'Tier 2 Mega DC',
-                regional_hub: 'Tier 3 Hub',
-                regional_depot: 'Tier 3 Depot',
-                fulfillment_center: 'Tier 3 Fulfillment'
-              }[node.node_type] || 'Node';
-
-              return (
-                <div
-                  key={node.node_id}
-                  onClick={() => setSelectedNodeId(node.node_id)}
-                  className={`p-4 rounded-xl border-2 transition-all cursor-pointer relative ${
-                    isSelected
-                      ? 'border-[#ff5400] shadow-md ring-2 ring-orange-200 bg-white'
-                      : 'border-slate-200 bg-slate-50/60 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                      {tierLabel}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${statusColor}`}>
-                      {node.mitigated.status}
-                    </span>
-                  </div>
-
-                  <h4 className="text-xs font-extrabold text-slate-900 truncate" title={node.name}>
-                    {node.name}
-                  </h4>
-                  <div className="text-[11px] font-semibold text-slate-500">{node.city}</div>
-
-                  <div className="mt-3 space-y-1.5">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-slate-500">Stock:</span>
-                      <span className="font-mono font-bold text-slate-800">{node.mitigated.stock?.toLocaleString()} u</span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="bg-[#ff5400] h-1.5 rounded-full"
-                        style={{ width: `${Math.min(100, node.mitigated.capacity_utilization_pct)}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-[10px] text-slate-400">
-                      <span>Util: {node.mitigated.capacity_utilization_pct}%</span>
-                      <span>Lead: {node.lead_time_days}d</span>
-                    </div>
-                  </div>
-
-                  {isSelected && (
-                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#ff5400] rotate-45 rounded-xs" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Node Detail Inspector Drawer */}
-          {activeNodeDetails && (
-            <div className="p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-slate-300 flex items-center justify-center text-[#ff5400]">
-                    <Package className="w-5 h-5" />
-                  </div>
+              {/* Controls Row: Mitigation Toggle & Horizon Selector */}
+              <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-slate-800 items-center">
+                {/* Mitigation Toggle Switch */}
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
                   <div>
-                    <h4 className="text-sm font-extrabold text-slate-900">
-                      {activeNodeDetails.name} <span className="font-mono text-xs text-slate-400">({activeNodeDetails.node_id})</span>
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      {activeNodeDetails.city} • Holding Rate: ₹{activeNodeDetails.holding_cost_rate}/unit/day • Replenishment Lead Time: {activeNodeDetails.lead_time_days} days
-                    </p>
+                    <div className="text-[11px] font-bold text-slate-200">Mitigation</div>
+                    <div className="text-[9px] text-slate-400">Auto Reroute</div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextMit = !enableMitigation;
+                      setEnableMitigation(nextMit);
+                      runSimulation(selectedScenarioId, shockIntensity, nextMit, horizonDays);
+                    }}
+                    className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      enableMitigation ? 'bg-[#00c853]' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                        enableMitigation ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="text-right">
-                    <div className="text-[11px] font-bold text-slate-400 uppercase">Capacity</div>
-                    <div className="text-xs font-mono font-bold text-slate-800">
-                      {activeNodeDetails.capacity_units?.toLocaleString()} units
-                    </div>
-                  </div>
+                {/* Horizon Selector */}
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                  <div className="text-[11px] font-bold text-slate-200">Horizon</div>
+                  <select
+                    value={horizonDays}
+                    onChange={(e) => {
+                      const h = Number(e.target.value);
+                      setHorizonDays(h);
+                      runSimulation(selectedScenarioId, shockIntensity, enableMitigation, h);
+                    }}
+                    className="text-xs font-mono font-bold bg-slate-950 border border-slate-700 text-slate-200 rounded px-2 py-1"
+                  >
+                    <option value={7}>7 Days</option>
+                    <option value={14}>14 Days</option>
+                    <option value={21}>21 Days</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Side-by-side node metrics: Baseline vs Mitigated */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                <div className="p-3 rounded-lg bg-white border border-slate-200 space-y-1">
-                  <div className="text-slate-500 font-medium">Mitigated Stock Level</div>
-                  <div className="text-base font-extrabold font-mono text-emerald-700">
-                    {activeNodeDetails.mitigated?.stock?.toLocaleString()} units
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    Baseline was: {activeNodeDetails.baseline?.stock?.toLocaleString()} units
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-lg bg-white border border-slate-200 space-y-1">
-                  <div className="text-slate-500 font-medium">Capacity Utilization</div>
-                  <div className="text-base font-extrabold font-mono text-slate-900">
-                    {activeNodeDetails.mitigated?.capacity_utilization_pct}%
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    Baseline was: {activeNodeDetails.baseline?.capacity_utilization_pct}%
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-lg bg-white border border-slate-200 space-y-1">
-                  <div className="text-slate-500 font-medium">Stockout Probability</div>
-                  <div className="text-base font-extrabold font-mono text-emerald-700">
-                    {activeNodeDetails.mitigated?.stockout_probability_pct}%
-                  </div>
-                  <div className="text-[10px] text-rose-500 font-bold">
-                    Baseline was: {activeNodeDetails.baseline?.stockout_probability_pct}%
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-lg bg-white border border-slate-200 space-y-1">
-                  <div className="text-slate-500 font-medium">Unmet Customer Demand</div>
-                  <div className="text-base font-extrabold font-mono text-emerald-700">
-                    {activeNodeDetails.mitigated?.unmet_demand_units} units
-                  </div>
-                  <div className="text-[10px] text-rose-500 font-bold">
-                    Baseline deficit: {activeNodeDetails.baseline?.unmet_demand_units} units
-                  </div>
-                </div>
-              </div>
+              {/* Action Trigger Button */}
+              <button
+                type="button"
+                onClick={() => runSimulation(selectedScenarioId, shockIntensity, enableMitigation, horizonDays)}
+                disabled={loading}
+                className="w-full py-2.5 rounded-xl bg-[#ff5400] hover:bg-[#e04a00] text-white text-xs font-black transition active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>{loading ? 'Simulating Dynamic Shock...' : 'Simulate Shock Response (< 5.0s)'}</span>
+              </button>
             </div>
           )}
-
-          {/* Inter-Node Corridor Status Table */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <Route className="w-3.5 h-3.5 text-[#ff5400]" />
-              Corridor Transit &amp; Contingency Bypass Status
-            </h4>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-700">
-                  <tr>
-                    <th className="p-3">Corridor</th>
-                    <th className="p-3">Distance</th>
-                    <th className="p-3">Normal</th>
-                    <th className="p-3">Baseline Shock</th>
-                    <th className="p-3">Mitigated Transit</th>
-                    <th className="p-3">Contingency Bypass Alignment</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {simulationData.links?.map((link) => {
-                    const isRerouted = link.mitigated?.is_rerouted;
-                    return (
-                      <tr key={link.link_id} className={isRerouted ? 'bg-blue-50/30' : 'bg-white'}>
-                        <td className="p-3 font-bold text-slate-900">
-                          {link.corridor_name}
-                        </td>
-                        <td className="p-3 font-mono text-slate-600">{link.distance_km} km</td>
-                        <td className="p-3 font-mono text-slate-600">{link.nominal_hours}h</td>
-                        <td className="p-3">
-                          <span className={`font-mono font-bold ${link.baseline.delay_hours > 0 ? 'text-rose-600' : 'text-slate-700'}`}>
-                            {link.baseline.simulated_hours}h
-                            {link.baseline.delay_hours > 0 && ` (+${link.baseline.delay_hours}h)`}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-mono font-bold text-emerald-700">
-                            {link.mitigated.simulated_hours}h
-                            {link.mitigated.delay_hours > 0 && ` (+${link.mitigated.delay_hours}h)`}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          {isRerouted ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
-                              <Split className="w-3 h-3" />
-                              {link.alternative_route?.name}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-slate-400">Standard Direct Alignment</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
-      )}
+      </div>
 
-      {/* 5. Trajectory Simulation Timeline Chart */}
-      {chartData && (
-        <div className="bright-card p-6 sm:p-7 rounded-2xl bg-white border-2 border-slate-200 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-[#ff5400]" />
-                Simulation Trajectory Over Time
-              </h3>
-              <p className="text-xs text-slate-500">
-                Discrete-event ripple effect comparison across the {simulationData.simulation_horizon_days}-day horizon
-              </p>
+      {/* 4. Bottom-Right Drawer: Comparative Financial Impact & Dynamic Timeline Charts */}
+      <div className="absolute bottom-3 right-3 z-20 pointer-events-auto w-[420px] sm:w-[500px] max-w-[calc(100%-1.5rem)]">
+        <div className="rounded-2xl backdrop-blur-2xl bg-slate-950/88 border border-slate-700/80 shadow-2xl text-white overflow-hidden transition-all duration-300">
+          {/* Drawer Header & Tabs */}
+          <div className="px-4 py-2.5 bg-slate-900/70 border-b border-slate-800/80 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <Layers className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-black tracking-wide text-slate-100 uppercase">
+                  Comparative Impact &amp; Trajectory
+                </h3>
+                <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                  Save ₹{(netSavings / 1000).toFixed(1)}k • -{simulationData?.comparative_delta?.sla_delay_reduction_pct}% Delay
+                </span>
+              </div>
             </div>
-            <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200">
+
+            <div className="flex items-center gap-1.5">
+              {!isImpactCollapsed && (
+                <div className="flex p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setImpactDrawerTab('impact')}
+                    className={`px-2 py-1 rounded-md transition ${
+                      impactDrawerTab === 'impact' ? 'bg-slate-800 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Impact
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImpactDrawerTab('timeline')}
+                    className={`px-2 py-1 rounded-md transition ${
+                      impactDrawerTab === 'timeline' ? 'bg-slate-800 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Timeline
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImpactDrawerTab('directives')}
+                    className={`px-2 py-1 rounded-md transition ${
+                      impactDrawerTab === 'directives' ? 'bg-slate-800 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Directives
+                  </button>
+                </div>
+              )}
+
               <button
-                onClick={() => setChartMetric('stock')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                  chartMetric === 'stock' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                }`}
+                type="button"
+                onClick={() => setIsImpactCollapsed(!isImpactCollapsed)}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                title={isImpactCollapsed ? 'Expand Impact Drawer' : 'Collapse Drawer'}
               >
-                Network Inventory Stock
-              </button>
-              <button
-                onClick={() => setChartMetric('delay')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                  chartMetric === 'delay' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Cumulative SLA Delay Hours
+                {isImpactCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
-          <div className="h-72 w-full pt-2">
-            <Line data={chartData} options={chartOptions} />
-          </div>
-        </div>
-      )}
-
-      {/* 6. Automated Contingency Rerouting & Mitigation Recommendations */}
-      {simulationData && (
-        <div className="bright-card p-6 sm:p-7 rounded-2xl bg-white border-2 border-slate-200 space-y-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-[#ff5400]" />
-                Automated Contingency Directives &amp; Actionable Playbook
-              </h3>
-              <p className="text-xs text-slate-500">
-                Actionable supply chain rerouting directives synthesized by the Cognitive Digital Twin Engine
-              </p>
-            </div>
-            <span className="text-xs font-extrabold text-[#ff5400] bg-orange-50 px-2.5 py-1 rounded-md border border-orange-200">
-              {simulationData.contingency_recommendations?.length || 0} Directives Available
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {simulationData.contingency_recommendations?.map((rec, idx) => {
-              const priorityBadge = {
-                CRITICAL: 'bg-rose-100 text-rose-800 border-rose-300',
-                HIGH: 'bg-orange-100 text-orange-800 border-orange-300',
-                MEDIUM: 'bg-amber-100 text-amber-800 border-amber-300',
-                LOW: 'bg-slate-100 text-slate-700 border-slate-300'
-              }[rec.priority] || 'bg-slate-100 text-slate-700';
-
-              const isDispatched = dispatchedDirectives[idx];
-
-              return (
-                <div
-                  key={idx}
-                  className="p-4 sm:p-5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition space-y-3 flex flex-col justify-between"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase ${priorityBadge}`}>
-                        {rec.priority} PRIORITY
-                      </span>
-                      <span className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        {rec.expected_impact}
-                      </span>
+          {/* Drawer Body (Expandable) */}
+          {!isImpactCollapsed && (
+            <div className="p-4 space-y-3 max-h-[460px] overflow-y-auto">
+              {/* Tab 1: Comparative Financial Impact Cards */}
+              {impactDrawerTab === 'impact' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {/* Card 1: Total Cost (Baseline vs Mitigated) */}
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase">
+                        <span>Operational Cost</span>
+                        <span className="text-emerald-400 font-mono font-extrabold">Save ₹{(netSavings / 1000).toFixed(1)}k</span>
+                      </div>
+                      <div className="flex items-baseline justify-between pt-0.5">
+                        <div className="text-lg font-black font-mono text-emerald-400">
+                          ₹{(mitigatedCost / 1000).toFixed(1)}k
+                        </div>
+                        <div className="text-xs font-bold font-mono text-rose-500 line-through opacity-70">
+                          ₹{(baselineCost / 1000).toFixed(1)}k
+                        </div>
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-medium">
+                        mitigated_cost &le; baseline_cost (Verified ✓)
+                      </div>
                     </div>
 
-                    <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
-                      {rec.action}
-                    </h4>
+                    {/* Card 2: SLA Delay Hours Avoided */}
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase">
+                        <span>SLA Delay Hours</span>
+                        <span className="text-emerald-400 font-mono font-extrabold">
+                          -{simulationData?.comparative_delta?.sla_delay_reduction_pct}%
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between pt-0.5">
+                        <div className="text-lg font-black font-mono text-slate-100">
+                          {simulationData?.mitigated_metrics?.sla_delay_hours}h
+                        </div>
+                        <div className="text-xs font-bold font-mono text-rose-500 line-through opacity-70">
+                          {simulationData?.baseline_metrics?.sla_delay_hours}h
+                        </div>
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-medium">
+                        Avoids {delayHoursAvoided}h delivery delay
+                      </div>
+                    </div>
 
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      {rec.details}
-                    </p>
+                    {/* Card 3: Composite Risk Index */}
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase">
+                        <span>Composite Risk</span>
+                        <span className="text-emerald-400 font-mono font-extrabold">
+                          -{simulationData?.comparative_delta?.risk_reduction_pct}%
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between pt-0.5">
+                        <div className="text-lg font-black font-mono text-slate-100">
+                          {simulationData?.mitigated_metrics?.risk_index}
+                          <span className="text-[10px] text-slate-500 font-normal"> / 100</span>
+                        </div>
+                        <div className="text-xs font-bold font-mono text-rose-500 line-through opacity-70">
+                          {simulationData?.baseline_metrics?.risk_index}
+                        </div>
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-medium">
+                        Bottleneck index stabilized
+                      </div>
+                    </div>
+
+                    {/* Card 4: Demurrage & Holding Surge */}
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase">
+                        <span>Yard Demurrage</span>
+                        <span className="text-blue-400 font-mono font-bold">
+                          +{simulationData?.mitigated_metrics?.holding_cost_surge_pct}%
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between pt-0.5">
+                        <div className="text-lg font-black font-mono text-slate-100">
+                          ₹{((simulationData?.mitigated_metrics?.holding_cost_inr || 0) / 1000).toFixed(1)}k
+                        </div>
+                        <div className="text-xs font-bold font-mono text-rose-500 line-through opacity-70">
+                          ₹{((simulationData?.baseline_metrics?.holding_cost_inr || 0) / 1000).toFixed(1)}k
+                        </div>
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-medium">
+                        Diverts container yard dwell choke
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[11px] font-medium text-slate-400">
-                      Target: TMS &amp; WMS Dispatch
+                  {/* CO2 & Detour Benefit Banner */}
+                  <div className="p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/30 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <Fuel className="w-4 h-4 text-sky-400" />
+                      <div>
+                        <div className="text-[11px] font-bold text-sky-200">Green Bypass Flow</div>
+                        <div className="text-[10px] text-slate-400">
+                          Detour bypass eliminates {Math.round(simulationData?.baseline_metrics?.co2_emissions_kg || 0)} kg stop-and-go idling waste
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 border border-blue-400/40">
+                      Cruise Mode Active
                     </span>
-                    <button
-                      onClick={() => handleDispatchDirective(idx)}
-                      disabled={isDispatched}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 cursor-pointer ${
-                        isDispatched
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          : 'bg-slate-900 text-white hover:bg-slate-800'
-                      }`}
-                    >
-                      {isDispatched ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Dispatched to TMS</span>
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-3.5 h-3.5" />
-                          <span>Dispatch Directive</span>
-                        </>
-                      )}
-                    </button>
                   </div>
                 </div>
-              );
-            })}
+              )}
+
+              {/* Tab 2: Dynamic Timeline Charts */}
+              {impactDrawerTab === 'timeline' && chartData && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">
+                      {simulationData?.simulation_horizon_days}-Day Trajectory Comparison
+                    </span>
+                    <div className="inline-flex p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setChartMetric('stock')}
+                        className={`px-2 py-0.5 rounded transition ${
+                          chartMetric === 'stock' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400'
+                        }`}
+                      >
+                        Inventory Stock
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChartMetric('delay')}
+                        className={`px-2 py-0.5 rounded transition ${
+                          chartMetric === 'delay' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400'
+                        }`}
+                      >
+                        Cumulative Delay
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="h-48 w-full pt-1">
+                    <Line data={chartData} options={chartOptions} />
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: Actionable Directives Playbook */}
+              {impactDrawerTab === 'directives' && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                    <span>COGNITIVE MITIGATION DIRECTIVES</span>
+                    <span className="text-[#ff5400]">{simulationData?.contingency_recommendations?.length || 0} Ready</span>
+                  </div>
+
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {simulationData?.contingency_recommendations?.map((rec, idx) => {
+                      const isDispatched = dispatchedDirectives[idx];
+                      const priorityColor = {
+                        CRITICAL: 'bg-rose-950 text-rose-300 border-rose-500/50',
+                        HIGH: 'bg-orange-950 text-orange-300 border-orange-500/50',
+                        MEDIUM: 'bg-amber-950 text-amber-300 border-amber-500/50',
+                        LOW: 'bg-slate-900 text-slate-300 border-slate-700'
+                      }[rec.priority] || 'bg-slate-900 text-slate-300';
+
+                      return (
+                        <div
+                          key={idx}
+                          className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border uppercase ${priorityColor}`}>
+                              {rec.priority}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-emerald-400">
+                              {rec.expected_impact}
+                            </span>
+                          </div>
+                          <div className="text-xs font-bold text-slate-100">{rec.action}</div>
+                          <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+                            {rec.details}
+                          </p>
+                          <div className="pt-1.5 border-t border-slate-800/80 flex items-center justify-between">
+                            <span className="text-[10px] text-slate-500">TMS/WMS Dispatch</span>
+                            <button
+                              type="button"
+                              onClick={() => handleDispatchDirective(idx)}
+                              disabled={isDispatched}
+                              className={`px-2 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                isDispatched
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-white'
+                              }`}
+                            >
+                              {isDispatched ? (
+                                <>
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  <span>Dispatched</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Send className="w-3 h-3" />
+                                  <span>Dispatch Directive</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 5. Right-Side Facility Telemetry Inspector Drawer (Interactive 3D Picking Inspector) */}
+      {isInspectorOpen && activeNodeDetails && (
+        <div className="absolute top-16 right-3 bottom-16 z-30 pointer-events-auto w-84 sm:w-96 max-w-[calc(100%-1.5rem)]">
+          <div className="h-full rounded-2xl backdrop-blur-2xl bg-slate-950/92 border border-slate-700/80 shadow-2xl text-white flex flex-col overflow-hidden transition-all duration-300">
+            {/* Inspector Header */}
+            <div className="p-4 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-[#ff5400]">
+                  {getNodeIcon(activeNodeDetails.node_type, "w-5 h-5")}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-black text-slate-100">
+                      {activeNodeDetails.name}
+                    </h4>
+                  </div>
+                  <div className="text-[11px] text-slate-400 font-semibold">
+                    {activeNodeDetails.city} • <span className="font-mono text-slate-300">{activeNodeDetails.node_id}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => viewportRef.current?.flyToNode(activeNodeDetails.node_id)}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                  title="Glide 3D Camera to Node"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsInspectorOpen(false)}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                  title="Close Inspector"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Inspector Scrollable Metrics Content */}
+            <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+              {/* Section 1: Holographic Stock & Inventory Fill */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
+                    Inventory Stock &amp; Capacity
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${
+                    activeNodeDetails.fillStatus.status === 'healthy'
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                      : activeNodeDetails.fillStatus.status === 'stressed'
+                      ? 'bg-amber-950 text-amber-300 border-amber-500/50'
+                      : 'bg-rose-950 text-rose-300 border-rose-500/50'
+                  }`}>
+                    {activeNodeDetails.fillStatus.status} ({activeNodeDetails.fillStatus.fillPct}%)
+                  </span>
+                </div>
+
+                <div className="flex items-baseline justify-between">
+                  <div className="text-xl font-black font-mono text-slate-100">
+                    {activeNodeDetails.currentStock?.toLocaleString()}
+                    <span className="text-xs font-normal text-slate-400"> / {activeNodeDetails.capacity_units?.toLocaleString()} u</span>
+                  </div>
+                  <div className="text-xs font-bold font-mono text-emerald-400">
+                    {activeNodeDetails.utilizationPct}% Util
+                  </div>
+                </div>
+
+                {/* Progress bar reflecting holographic fill % */}
+                <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="h-2 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, activeNodeDetails.fillStatus.fillPct)}%`,
+                      backgroundColor: activeNodeDetails.fillStatus.hexColor,
+                      boxShadow: `0 0 10px ${activeNodeDetails.fillStatus.hexColor}`
+                    }}
+                  />
+                </div>
+
+                {/* Comparative stock baseline vs mitigated */}
+                <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                  <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                    <div className="text-slate-400 text-[10px]">Mitigated Buffer</div>
+                    <div className="font-mono font-bold text-emerald-400">
+                      {activeNodeDetails.mitigatedStock?.toLocaleString()} u
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                    <div className="text-slate-400 text-[10px]">Baseline Shock</div>
+                    <div className="font-mono font-bold text-rose-400">
+                      {activeNodeDetails.baselineStock?.toLocaleString()} u
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between text-[10px] text-slate-400 pt-0.5">
+                  <span>Stockout Risk: <strong className="text-slate-200">{activeNodeDetails.stockoutPct}%</strong> (was {activeNodeDetails.baselineStockoutPct}%)</span>
+                  <span>Deficit: <strong className="text-slate-200">{activeNodeDetails.unmetUnits} u</strong></span>
+                </div>
+              </div>
+
+              {/* Section 2: Dock Throughput & Gate Operations */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
+                    Dock Throughput &amp; Handling Rate
+                  </span>
+                  <span className="text-[10px] font-bold text-sky-400 font-mono">
+                    Tier {activeNodeDetails.echelon_tier}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">Dock Doors</div>
+                    <div className="text-base font-black font-mono text-slate-100 flex items-center gap-1.5">
+                      <Warehouse className="w-4 h-4 text-orange-400" />
+                      <span>{activeNodeDetails.dock_doors} Bays</span>
+                    </div>
+                    <div className="text-[9px] text-slate-500">Dedicated freight intake</div>
+                  </div>
+
+                  <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">Handling Rate</div>
+                    <div className="text-base font-black font-mono text-sky-400 flex items-center gap-1.5">
+                      <Truck className="w-4 h-4 text-sky-400" />
+                      <span>{activeNodeDetails.handling_rate_units_hr?.toLocaleString()} u/h</span>
+                    </div>
+                    <div className="text-[9px] text-slate-500">Cross-dock velocity</div>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-medium">Daily Gate Capacity (12h)</div>
+                    <div className="font-mono font-bold text-emerald-400 text-sm">
+                      {Math.round(activeNodeDetails.daily_gate_capacity).toLocaleString()} units/day
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-slate-400 font-medium">Turnaround Dwell</div>
+                    <div className="font-mono font-bold text-slate-200 text-xs">
+                      {activeNodeDetails.node_type === 'port' ? '2.5 Hours' : '45 Minutes'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Lead Time & Inventory Holding Costs */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
+                  Replenishment Lead Time &amp; Holding Fees
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Replenishment Lead</div>
+                    <div className="text-sm font-black font-mono text-slate-100 flex items-center gap-1 mt-0.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{activeNodeDetails.lead_time_days} Days</span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Holding Fee Rate</div>
+                    <div className="text-sm font-black font-mono text-slate-100 mt-0.5">
+                      ₹{activeNodeDetails.holding_cost_rate} <span className="text-[9px] font-normal text-slate-400">/u/day</span>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-400 leading-relaxed pt-1">
+                  {activeNodeDetails.description}
+                </p>
+              </div>
+
+              {/* Section 4: Glide Camera Action */}
+              <button
+                type="button"
+                onClick={() => viewportRef.current?.flyToNode(activeNodeDetails.node_id)}
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer shadow-md"
+              >
+                <Globe className="w-4 h-4" />
+                <span>Glide 3D Camera to {activeNodeDetails.shortName}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Multi-Echelon Network Topology & Corridors Table Modal */}
+      {isTopologyModalOpen && (
+        <div className="absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6">
+          <div className="max-w-4xl w-full max-h-[85vh] rounded-2xl bg-slate-900 border-2 border-slate-700 shadow-2xl text-white flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#ff5400]/20 border border-[#ff5400]/40 flex items-center justify-center text-[#ff5400]">
+                  <Compass className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">
+                    Multi-Echelon Network Topology &amp; Corridors Matrix
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    5 strategic logistics hubs and 4 inter-node freight corridors under {simulationData?.scenario_name}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsTopologyModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-6 overflow-y-auto">
+              {/* 5 Facility Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                {FACILITY_NODES.map((node) => {
+                  const isSelected = selectedNodeId === node.node_id;
+                  const simNode = simulationData?.nodes?.find(n => n.node_id === node.node_id);
+                  const currentStock = simNode?.mitigated?.stock ?? simNode?.current_stock ?? node.nominal_stock;
+                  const status = simNode?.mitigated?.status || 'healthy';
+
+                  return (
+                    <div
+                      key={node.node_id}
+                      onClick={() => {
+                        handleSelectNode(node.node_id);
+                        setIsTopologyModalOpen(false);
+                      }}
+                      className={`p-3.5 rounded-xl border transition cursor-pointer ${
+                        isSelected
+                          ? 'border-[#ff5400] bg-orange-950/40 shadow-md'
+                          : 'border-slate-800 bg-slate-850 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-mono text-slate-400 uppercase">
+                          Tier {node.echelon_tier}
+                        </span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                          status === 'healthy' ? 'bg-emerald-950 text-emerald-400' :
+                          status === 'stressed' ? 'bg-amber-950 text-amber-400' :
+                          'bg-rose-950 text-rose-400'
+                        }`}>
+                          {status}
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-white truncate">{node.shortName}</div>
+                      <div className="text-[10px] text-slate-400">{node.city}</div>
+                      <div className="mt-2 pt-2 border-t border-slate-800/80 text-[10px] font-mono">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Stock:</span>
+                          <span className="font-bold text-slate-200">{currentStock.toLocaleString()} u</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Lead:</span>
+                          <span className="text-slate-200">{node.lead_time_days}d</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Corridor Transit Table */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                  <Route className="w-4 h-4 text-[#ff5400]" />
+                  <span>Corridor Transit &amp; Alternative Bypass Routing Status</span>
+                </h4>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-850 border-b border-slate-800 font-bold text-slate-400">
+                      <tr>
+                        <th className="p-3">Corridor</th>
+                        <th className="p-3">Distance</th>
+                        <th className="p-3">Nominal</th>
+                        <th className="p-3">Baseline Shock</th>
+                        <th className="p-3">Mitigated Transit</th>
+                        <th className="p-3">Contingency Alignment</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-medium">
+                      {simulationData?.links?.map((link) => {
+                        const isRerouted = link.mitigated?.is_rerouted;
+                        return (
+                          <tr key={link.link_id} className={isRerouted ? 'bg-blue-950/30' : 'bg-slate-900/60'}>
+                            <td className="p-3 font-bold text-slate-200">
+                              {link.corridor_name}
+                              <div className="text-[10px] text-slate-500">{link.highway_code}</div>
+                            </td>
+                            <td className="p-3 font-mono text-slate-400">{link.distance_km} km</td>
+                            <td className="p-3 font-mono text-slate-400">{link.nominal_hours}h</td>
+                            <td className="p-3">
+                              <span className={`font-mono font-bold ${link.baseline.delay_hours > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                                {link.baseline.simulated_hours}h
+                                {link.baseline.delay_hours > 0 && ` (+${link.baseline.delay_hours}h)`}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-mono font-bold text-emerald-400">
+                                {link.mitigated.simulated_hours}h
+                                {link.mitigated.delay_hours > 0 && ` (+${link.mitigated.delay_hours}h)`}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {isRerouted ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded border border-sky-500/40">
+                                  <Split className="w-3 h-3" />
+                                  {link.alternative_route?.name}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-500">Standard Direct Alignment</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

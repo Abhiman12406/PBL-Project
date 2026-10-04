@@ -31,6 +31,7 @@ export const FACILITY_NODES = [
     holding_cost_rate: 18.5,
     lead_time_days: 8.0,
     dock_doors: 14,
+    handling_rate_units_hr: 4500,
     description: 'Primary maritime import gateway with multi-berth container handling and automated rail siding.',
     cameraPreset: {
       longitude: 72.9515,
@@ -58,6 +59,7 @@ export const FACILITY_NODES = [
     holding_cost_rate: 8.2,
     lead_time_days: 1.5,
     dock_doors: 28,
+    handling_rate_units_hr: 3200,
     description: 'Mega distribution hub consolidating port freight for Maharashtra corridors and cross-docking.',
     cameraPreset: {
       longitude: 73.0631,
@@ -85,6 +87,7 @@ export const FACILITY_NODES = [
     holding_cost_rate: 6.5,
     lead_time_days: 0.8,
     dock_doors: 12,
+    handling_rate_units_hr: 1600,
     description: 'Suburban micro-hub serving Mumbai Metropolitan Region retail, dark stores, and FMCG clients.',
     cameraPreset: {
       longitude: 72.9781,
@@ -112,6 +115,7 @@ export const FACILITY_NODES = [
     holding_cost_rate: 5.0,
     lead_time_days: 1.2,
     dock_doors: 10,
+    handling_rate_units_hr: 1400,
     description: 'Northern agricultural and industrial transit depot accessed via the steep Kasara Ghat NH-160 corridor.',
     cameraPreset: {
       longitude: 73.7898,
@@ -139,6 +143,7 @@ export const FACILITY_NODES = [
     holding_cost_rate: 7.5,
     lead_time_days: 1.0,
     dock_doors: 20,
+    handling_rate_units_hr: 2800,
     description: 'High-velocity automotive assembly and industrial components center fed via Mumbai-Pune Expressway.',
     cameraPreset: {
       longitude: 73.8567,
