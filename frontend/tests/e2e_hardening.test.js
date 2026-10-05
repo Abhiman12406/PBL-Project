@@ -498,13 +498,26 @@ describe('06: End-to-End Hardening, Offline Fallback & Performance Verification'
       const director = FALLBACK_PROFILES.director;
       assert.ok(director.permissions.views.includes('kpis'), 'Director has KPIs');
       assert.ok(director.permissions.views.includes('twin'), 'Director has Twin');
+      assert.ok(director.permissions.actions.includes('telemetry_control'), 'Director can control telemetry');
 
       const customs = FALLBACK_PROFILES.customs;
       assert.ok(customs.permissions.views.includes('compliance'), 'Customs has Compliance');
       assert.ok(!customs.permissions.views.includes('routing'), 'Customs restricted from routing');
+      assert.ok(!customs.permissions.actions.includes('telemetry_control'), 'Customs cannot control telemetry');
 
       const admin = FALLBACK_PROFILES.admin;
       assert.ok(admin.permissions.actions.includes('*'), 'Admin has wildcard');
+
+      // Helper function simulating canPerform / canDo
+      const canDoHelper = (role, profile, action) => {
+        if (role === 'admin') return true;
+        const actions = profile?.permissions?.actions || [];
+        return actions.includes('*') || actions.includes(action);
+      };
+
+      assert.equal(canDoHelper('director', director, 'telemetry_control'), true);
+      assert.equal(canDoHelper('customs', customs, 'telemetry_control'), false);
+      assert.equal(canDoHelper('admin', admin, 'any_random_action'), true);
     });
 
     test('Stock Capacity threshold calculation executes in sub-microsecond time for steady 60 FPS', () => {

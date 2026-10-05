@@ -69,13 +69,13 @@ export default function CockpitHUD({
   });
 
   const canControl =
-    canDo('telemetry_control') ||
+    (typeof canDo === 'function' ? canDo('telemetry_control') : false) ||
     currentRole === 'admin' ||
     currentRole === 'dispatcher' ||
     currentRole === 'director';
 
   const canInject =
-    canDo('inject_roadblock') ||
+    (typeof canDo === 'function' ? canDo('inject_roadblock') : false) ||
     currentRole === 'admin' ||
     currentRole === 'dispatcher' ||
     currentRole === 'director';

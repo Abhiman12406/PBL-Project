@@ -69,8 +69,8 @@ export default function SimulationBar({ onRerouteEvent }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
 
-  const canControl = canDo('telemetry_control') || currentRole === 'admin' || currentRole === 'dispatcher' || currentRole === 'director';
-  const canInject = canDo('inject_roadblock') || currentRole === 'admin' || currentRole === 'dispatcher' || currentRole === 'director';
+  const canControl = (typeof canDo === 'function' ? canDo('telemetry_control') : false) || currentRole === 'admin' || currentRole === 'dispatcher' || currentRole === 'director';
+  const canInject = (typeof canDo === 'function' ? canDo('inject_roadblock') : false) || currentRole === 'admin' || currentRole === 'dispatcher' || currentRole === 'director';
 
   // Connect WebSocket & subscribe to events
   useEffect(() => {

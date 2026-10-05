@@ -69,6 +69,8 @@ export function PersonaProvider({ children }) {
     return actions.includes('*') || actions.includes(actionName);
   };
 
+  const canDo = canPerform;
+
   return (
     <PersonaContext.Provider value={{
       currentRole,
@@ -77,6 +79,7 @@ export function PersonaProvider({ children }) {
       switchPersona,
       canView,
       canPerform,
+      canDo,
       loading
     }}>
       {children}
