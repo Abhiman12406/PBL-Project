@@ -60,7 +60,8 @@ import {
   createKasaraElevationTerrain,
   createCorridorLogisticsNodes
 } from './3d/proceduralWorld.js';
-import { createProceduralTruck } from './3d/proceduralModels.js';
+import { createProceduralTruck, createRoadblockBarricade } from './3d/proceduralModels.js';
+import CockpitHUD from './CockpitHUD';
 
 export {
   STAGE_NODES,
@@ -87,7 +88,12 @@ export default function PersistentStage3D({ onSelectNode }) {
     pipMinimized,
     setPipMinimized,
     selectedFacilityId,
-    setSelectedFacilityId
+    setSelectedFacilityId,
+    activeVehicleId = 'TRK-MH-01',
+    setActiveVehicleId,
+    activeRoadblocks = [],
+    setActiveRoadblocks,
+    simState
   } = useWorkspace();
 
   // Reactive UI State
@@ -98,7 +104,7 @@ export default function PersistentStage3D({ onSelectNode }) {
   const [selectedNode, setSelectedNode] = useState(null);
   const [cameraCoords, setCameraCoords] = useState({ x: 0, y: 15, z: 20 });
   const [hudMinimized, setHudMinimized] = useState(false);
-  const [simSpeed, setSimSpeed] = useState(1); // 0 = paused, 1 = 1x, 2 = 2x, 4 = 4x
+  const [simSpeed, setSimSpeed] = useState(1);
   const [isPaused, setIsPaused] = useState(false);
 
   // Synchronized Vehicle WGS84 GPS State
@@ -113,18 +119,6 @@ export default function PersistentStage3D({ onSelectNode }) {
     headingDeg: 38
   });
 
-  // Live Vehicle Telematics state
-  const [vehicleTelematics, setVehicleTelematics] = useState({
-    id: 'TRK-MH-01',
-    model: 'Volvo FH Electric (Cold-Chain)',
-    speedKmh: 64,
-    socPercent: 82,
-    cargoTempC: -18.4,
-    altitudeM: 120,
-    headingDeg: 38,
-    corridorLeg: 'NH-160 Northbound'
-  });
-
   // Three.js internal references for 60 FPS animation loop
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
@@ -133,12 +127,31 @@ export default function PersistentStage3D({ onSelectNode }) {
   const simSpeedRef = useRef(1);
   const isPausedRef = useRef(false);
 
-  // Vehicle trajectory and mesh references
-  const truckGroupRef = useRef(null);
+  // Active Vehicle & Roadblock sync references
+  const activeVehicleIdRef = useRef('TRK-MH-01');
+  const activeRoadblocksRef = useRef([]);
+
+  // Multi-vehicle trajectory and mesh references
+  const truck1GroupRef = useRef(null);
+  const truck2GroupRef = useRef(null);
+  const roadblockGroupRef = useRef(null);
   const corridorCurveRef = useRef(null);
-  const truckStateRef = useRef({
-    progress: 0.08, // Start along JNPT-Bhiwandi corridor
+  const detourCurveRef = useRef(null);
+  const southernCurveRef = useRef(null);
+
+  // TRK-MH-01 (Reefer, Nashik Corridor / Malshej Detour)
+  const truck1StateRef = useRef({
+    progress: 0.12,
     speed: 0.00065,
+    pos: [0, 0, 0],
+    look: [0, 0, 0],
+    heading: [0, 0, 1]
+  });
+
+  // TRK-MH-02 (EV Express Carrier, Pune Corridor)
+  const truck2StateRef = useRef({
+    progress: 0.22,
+    speed: 0.00072,
     pos: [0, 0, 0],
     look: [0, 0, 0],
     heading: [0, 0, 1]
@@ -147,9 +160,9 @@ export default function PersistentStage3D({ onSelectNode }) {
   // Free-look orbit parameters when in Chase Cam mode
   const freeLookRef = useRef({
     isDragging: false,
-    yaw: 0, // Horizontal rotation offset around vehicle
-    pitch: 0.15, // Vertical angle offset
-    distance: 14.0, // Camera follow distance
+    yaw: 0,
+    pitch: 0.15,
+    distance: 14.0,
     prevX: 0,
     prevY: 0
   });
@@ -173,16 +186,25 @@ export default function PersistentStage3D({ onSelectNode }) {
 
   // Keep refs synchronized with state
   useEffect(() => {
+    activeVehicleIdRef.current = activeVehicleId || 'TRK-MH-01';
+  }, [activeVehicleId]);
+
+  useEffect(() => {
+    activeRoadblocksRef.current = activeRoadblocks || [];
+  }, [activeRoadblocks]);
+
+  useEffect(() => {
+    if (simState) {
+      simSpeedRef.current = simState.speed_multiplier || 1.0;
+      isPausedRef.current = !simState.is_running;
+      setSimSpeed(simState.speed_multiplier || 1.0);
+      setIsPaused(!simState.is_running);
+    }
+  }, [simState]);
+
+  useEffect(() => {
     cameraModeRef.current = cameraMode;
   }, [cameraMode]);
-
-  useEffect(() => {
-    simSpeedRef.current = simSpeed;
-  }, [simSpeed]);
-
-  useEffect(() => {
-    isPausedRef.current = isPaused;
-  }, [isPaused]);
 
   // Initialize Three.js 3D Procedural Logistics World
   useEffect(() => {
@@ -275,8 +297,10 @@ export default function PersistentStage3D({ onSelectNode }) {
     scene.add(kasaraElevationGroup);
 
     // 8. Procedural Extruded Highway Ribbons from real WGS84 GPS corridor waypoints
-    const { mainCorridorCurve, southernCurve, bypassCurve } = buildCorridorSplines();
+    const { mainCorridorCurve, southernCurve, bypassCurve, fullDetourCurve } = buildCorridorSplines();
     corridorCurveRef.current = mainCorridorCurve;
+    detourCurveRef.current = fullDetourCurve;
+    southernCurveRef.current = southernCurve;
 
     // Main Corridor Ribbon (JNPT -> Bhiwandi -> Kasara -> Nashik)
     const mainRoadRibbon = createExtrudedHighwayRibbon(mainCorridorCurve, {
@@ -298,6 +322,17 @@ export default function PersistentStage3D({ onSelectNode }) {
       scene.add(southRoadRibbon);
     }
 
+    // Bypass Corridor Ribbon (Malshej Ghat Detour Route)
+    if (bypassCurve) {
+      const bypassRoadRibbon = createExtrudedHighwayRibbon(bypassCurve, {
+        roadWidth: 1.5,
+        roadSegments: 160,
+        glowColor: 0xffb703,
+        shoulderColor: 0xff5400
+      });
+      scene.add(bypassRoadRibbon);
+    }
+
     // 9. Animated Traffic Flow Light Pulses along highway lanes
     const { group: pulsesGroup, pulses } = createTrafficPulses(mainCorridorCurve, 10);
     scene.add(pulsesGroup);
@@ -308,16 +343,35 @@ export default function PersistentStage3D({ onSelectNode }) {
     scene.add(facilitiesGroup);
     ringsRef.current = rings;
 
-    // 11. Commercial Freight Vehicle (Truck) Model
-    const truckGroup = createProceduralTruck({
+    // 11. 3D Procedural Roadblock Barricade at Kasara Ghat Mountain Pass
+    const roadblockBarricade = createRoadblockBarricade({
+      pos: [14, 9.8, -24],
+      rotationY: 0.45
+    });
+    roadblockBarricade.visible = false;
+    scene.add(roadblockBarricade);
+    roadblockGroupRef.current = roadblockBarricade;
+
+    // 12. Commercial Freight Fleet Vehicles
+    // Truck 1: TRK-MH-01 Reefer (Nashik Corridor, Cold-Chain Vaccines)
+    const truck1Group = createProceduralTruck({
       cabColor: 0xff5400,
       trailerColor: 0xf8fafc,
       beaconColor: 0x10b981
     });
-    scene.add(truckGroup);
-    truckGroupRef.current = truckGroup;
+    scene.add(truck1Group);
+    truck1GroupRef.current = truck1Group;
 
-    // 12. 60 FPS Render & Animation Loop
+    // Truck 2: TRK-MH-02 EV Carrier (Pune Expressway, High-Tech Electronics)
+    const truck2Group = createProceduralTruck({
+      cabColor: 0x06b6d4,
+      trailerColor: 0x1e293b,
+      beaconColor: 0x3b82f6
+    });
+    scene.add(truck2Group);
+    truck2GroupRef.current = truck2Group;
+
+    // 13. 60 FPS Render & Animation Loop
     let lastTime = performance.now();
     let frameCount = 0;
     let fpsAccumulator = 0;
@@ -357,73 +411,119 @@ export default function PersistentStage3D({ onSelectNode }) {
         r.mesh.material.opacity = Math.max(0, 1 - (r.scale - 1) / 1.8);
       });
 
-      // Advance Truck along trajectory if not paused
+      // Check Roadblock status at Kasara Ghat
+      const isBlocked = (activeRoadblocksRef.current || []).some(
+        (rb) => rb.roadblock_id === 'RB-KASARA-01' || rb.corridor_node === 'KSR'
+      );
+
+      // Toggle 3D barricade visibility and animate hazard strobe beacons
+      if (roadblockGroupRef.current) {
+        roadblockGroupRef.current.visible = isBlocked;
+        if (isBlocked && roadblockGroupRef.current.update) {
+          roadblockGroupRef.current.update(time);
+        }
+      }
+
+      // Active trajectory curves for both fleet vehicles
+      // TRK-MH-01: if blocked, steer onto Malshej Ghat detour; else main corridor
+      const curve1 = (isBlocked && detourCurveRef.current)
+        ? detourCurveRef.current
+        : (corridorCurveRef.current || mainCorridorCurve);
+      truck1StateRef.current.speed = isBlocked ? 0.00045 : 0.00065;
+
+      // TRK-MH-02: traverses southern Pune corridor
+      const curve2 = southernCurveRef.current || southernCurve || mainCorridorCurve;
+
+      // Advance both fleet vehicles along trajectories if not paused
       const effectiveSpeedMult = isPausedRef.current ? 0 : simSpeedRef.current;
       if (effectiveSpeedMult > 0) {
-        truckStateRef.current.progress =
-          (truckStateRef.current.progress + truckStateRef.current.speed * effectiveSpeedMult) % 1.0;
+        truck1StateRef.current.progress =
+          (truck1StateRef.current.progress + truck1StateRef.current.speed * effectiveSpeedMult) % 1.0;
+        truck2StateRef.current.progress =
+          (truck2StateRef.current.progress + truck2StateRef.current.speed * effectiveSpeedMult) % 1.0;
       }
 
-      const curve = corridorCurveRef.current || mainCorridorCurve;
-      const tPos = curve.getPointAt(truckStateRef.current.progress);
-      const tNext = curve.getPointAt((truckStateRef.current.progress + 0.006) % 1.0);
+      // 1. TRK-MH-01 3D Pose Calculation
+      const tPos1 = curve1.getPointAt(truck1StateRef.current.progress);
+      const tNext1 = curve1.getPointAt((truck1StateRef.current.progress + 0.006) % 1.0);
+      const headingVec1 = new THREE.Vector3().subVectors(tNext1, tPos1).normalize();
+      truck1StateRef.current.pos = [tPos1.x, tPos1.y, tPos1.z];
+      truck1StateRef.current.look = [tNext1.x, tNext1.y, tNext1.z];
+      truck1StateRef.current.heading = [headingVec1.x, headingVec1.y, headingVec1.z];
 
-      // Compute heading vector
-      const headingVec = new THREE.Vector3().subVectors(tNext, tPos).normalize();
-      truckStateRef.current.pos = [tPos.x, tPos.y, tPos.z];
-      truckStateRef.current.look = [tNext.x, tNext.y, tNext.z];
-      truckStateRef.current.heading = [headingVec.x, headingVec.y, headingVec.z];
+      truck1Group.position.copy(tPos1);
+      truck1Group.position.y += 0.85;
+      truck1Group.lookAt(tNext1.x, tPos1.y + 0.85, tNext1.z);
 
-      // Update Truck Mesh position & orientation
-      truckGroup.position.copy(tPos);
-      truckGroup.position.y += 0.85;
-      truckGroup.lookAt(tNext.x, tPos.y + 0.85, tNext.z);
+      // 2. TRK-MH-02 3D Pose Calculation
+      const tPos2 = curve2.getPointAt(truck2StateRef.current.progress);
+      const tNext2 = curve2.getPointAt((truck2StateRef.current.progress + 0.006) % 1.0);
+      const headingVec2 = new THREE.Vector3().subVectors(tNext2, tPos2).normalize();
+      truck2StateRef.current.pos = [tPos2.x, tPos2.y, tPos2.z];
+      truck2StateRef.current.look = [tNext2.x, tNext2.y, tNext2.z];
+      truck2StateRef.current.heading = [headingVec2.x, headingVec2.y, headingVec2.z];
 
-      // Spin Wheels proportional to speed
-      if (effectiveSpeedMult > 0 && truckGroup.wheelMeshes) {
-        truckGroup.wheelMeshes.forEach((w) => {
-          w.children.forEach((child) => {
-            child.rotation.x += delta * effectiveSpeedMult * 26.0;
+      truck2Group.position.copy(tPos2);
+      truck2Group.position.y += 0.85;
+      truck2Group.lookAt(tNext2.x, tPos2.y + 0.85, tNext2.z);
+
+      // Spin Wheels on both fleet vehicles
+      if (effectiveSpeedMult > 0) {
+        if (truck1Group.wheelMeshes) {
+          truck1Group.wheelMeshes.forEach((w) => {
+            w.children.forEach((child) => {
+              child.rotation.x += delta * effectiveSpeedMult * 26.0;
+            });
           });
-        });
+        }
+        if (truck2Group.wheelMeshes) {
+          truck2Group.wheelMeshes.forEach((w) => {
+            w.children.forEach((child) => {
+              child.rotation.x += delta * effectiveSpeedMult * 28.0;
+            });
+          });
+        }
       }
 
-      // Animate Cold-Chain Telemetry Beacon pulse
-      if (truckGroup.beaconGroup) {
-        const beaconPulse = 1.0 + Math.sin(time * 0.006) * 0.15;
-        truckGroup.beaconGroup.scale.set(beaconPulse, beaconPulse, beaconPulse);
+      // Animate Status Beacons
+      if (truck1Group.beaconGroup) {
+        const beaconPulse1 = 1.0 + Math.sin(time * 0.006) * 0.15;
+        truck1Group.beaconGroup.scale.set(beaconPulse1, beaconPulse1, beaconPulse1);
+      }
+      if (truck2Group.beaconGroup) {
+        const beaconPulse2 = 1.0 + Math.sin(time * 0.007) * 0.15;
+        truck2Group.beaconGroup.scale.set(beaconPulse2, beaconPulse2, beaconPulse2);
       }
 
-      // Throttled telemetry state update for HUD
+      // Active Camera Target Determination based on activeVehicleIdRef
+      const isTrackingTruck2 = activeVehicleIdRef.current === 'TRK-MH-02';
+      const activePos = isTrackingTruck2 ? tPos2 : tPos1;
+      const activeHeadingVec = isTrackingTruck2 ? headingVec2 : headingVec1;
+      const truckPosArr = [activePos.x, activePos.y + 0.85, activePos.z];
+      const truckHeadingArr = [activeHeadingVec.x, activeHeadingVec.y, activeHeadingVec.z];
+
+      // Throttled telemetry state update for WGS84 GPS Cesium Twin Synchronization
       telematicsThrottle += delta;
       if (telematicsThrottle >= 0.25) {
         telematicsThrottle = 0;
-        const speedKmh = Math.round(55 + Math.sin(truckStateRef.current.progress * Math.PI * 4) * 14 * (effectiveSpeedMult > 0 ? 1 : 0));
-        const headingDeg = Math.round(((Math.atan2(headingVec.x, -headingVec.z) * 180) / Math.PI + 360) % 360);
-        const altitudeM = Math.round(15 + (tPos.y / 9.5) * 565);
-        let corridorLeg = 'NH-160 / JNPT Expressway';
-        if (tPos.y > 6.0) corridorLeg = 'Kasara Ghat Mountain Ascent (+580m)';
-        else if (truckStateRef.current.progress > 0.6) corridorLeg = 'Nashik Agro Corridor NH-160';
-
-        setVehicleTelematics((prev) => ({
-          ...prev,
-          speedKmh: effectiveSpeedMult === 0 ? 0 : speedKmh,
-          altitudeM,
-          headingDeg,
-          corridorLeg
-        }));
-
-        // Update synchronized WGS84 GPS coordinate for Cesium Twin & HUD
+        const activeProg = isTrackingTruck2
+          ? truck2StateRef.current.progress
+          : truck1StateRef.current.progress;
+        const activeSpeedKmh = Math.round(
+          (isTrackingTruck2 ? 68 : isBlocked ? 48 : 62) * (effectiveSpeedMult > 0 ? 1 : 0)
+        );
         const syncVehicle = calculateSynchronizedVehicleState({
-          progress: truckStateRef.current.progress,
-          worldPos: [tPos.x, tPos.y, tPos.z],
-          headingVec: [headingVec.x, headingVec.y, headingVec.z],
-          speedKmh: effectiveSpeedMult === 0 ? 0 : speedKmh,
+          progress: activeProg,
+          worldPos: [activePos.x, activePos.y, activePos.z],
+          headingVec: [activeHeadingVec.x, activeHeadingVec.y, activeHeadingVec.z],
+          speedKmh: activeSpeedKmh,
           baseTelematics: {
-            id: 'TRK-MH-01',
-            model: 'Volvo FH Electric (Cold-Chain)',
-            socPercent: 82,
-            cargoTempC: -18.4
+            id: isTrackingTruck2 ? 'TRK-MH-02' : 'TRK-MH-01',
+            model: isTrackingTruck2
+              ? '16T Electric Express Carrier'
+              : '24T Heavy Commercial Reefer',
+            socPercent: isTrackingTruck2 ? 91.5 : 82.0,
+            cargoTempC: isTrackingTruck2 ? 19.2 : 4.1
           }
         });
         setVehicleGps(syncVehicle);
@@ -431,8 +531,6 @@ export default function PersistentStage3D({ onSelectNode }) {
 
       // Update Camera based on current Active Camera Mode
       const mode = cameraModeRef.current;
-      const truckPosArr = [tPos.x, tPos.y + 0.85, tPos.z];
-      const truckHeadingArr = [headingVec.x, headingVec.y, headingVec.z];
 
       if (mode === CAMERA_MODES.CHASE) {
         // 3rd-Person Dynamic Chase Cam
@@ -1034,79 +1132,12 @@ export default function PersistentStage3D({ onSelectNode }) {
         </div>
       )}
 
-      {/* 5. Bottom-Left Live Telematics Cockpit HUD (Universal Across Both Engines) */}
-      <div className="absolute bottom-22 left-6 z-20 pointer-events-auto cyber-glass rounded-2xl p-3.5 border border-slate-700/80 max-w-sm shadow-2xl backdrop-blur-xl">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 font-bold">
-              <Truck className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white leading-tight flex items-center gap-1.5">
-                <span>{vehicleTelematics.id}</span>
-                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
-                  ACTIVE
-                </span>
-              </div>
-              <div className="text-[10px] text-slate-400 font-mono">{vehicleTelematics.corridorLeg}</div>
-            </div>
-          </div>
-
-          {/* Simulation Speed & Pause Controls */}
-          <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-lg border border-slate-800">
-            <button
-              onClick={() => setIsPaused(!isPaused)}
-              className="p-1 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition"
-              title={isPaused ? 'Resume Simulation [Space]' : 'Pause Simulation [Space]'}
-            >
-              {isPaused ? <Play className="w-3 h-3 text-emerald-400" /> : <Pause className="w-3 h-3 text-amber-400" />}
-            </button>
-            {[1, 2, 4].map((mult) => (
-              <button
-                key={mult}
-                onClick={() => {
-                  setSimSpeed(mult);
-                  setIsPaused(false);
-                }}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition ${
-                  simSpeed === mult && !isPaused
-                    ? 'bg-cyan-500 text-slate-950 font-bold'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                {mult}x
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Live Gauges Row */}
-        <div className="grid grid-cols-4 gap-2 pt-2.5 text-center">
-          <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-            <div className="text-[9px] uppercase font-mono text-slate-400">Velocity</div>
-            <div className="text-sm font-extrabold text-cyan-300 font-mono">{vehicleTelematics.speedKmh}</div>
-            <div className="text-[8px] text-slate-500 font-mono">km/h</div>
-          </div>
-
-          <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-            <div className="text-[9px] uppercase font-mono text-slate-400">Cold-Chain</div>
-            <div className="text-sm font-extrabold text-emerald-400 font-mono">{vehicleTelematics.cargoTempC}°C</div>
-            <div className="text-[8px] text-emerald-500 font-mono">NOMINAL</div>
-          </div>
-
-          <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-            <div className="text-[9px] uppercase font-mono text-slate-400">Battery SoC</div>
-            <div className="text-sm font-extrabold text-white font-mono">{vehicleTelematics.socPercent}%</div>
-            <div className="text-[8px] text-slate-500 font-mono">Range 240km</div>
-          </div>
-
-          <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-            <div className="text-[9px] uppercase font-mono text-slate-400">Altitude</div>
-            <div className="text-sm font-extrabold text-amber-300 font-mono">{vehicleTelematics.altitudeM}m</div>
-            <div className="text-[8px] text-slate-500 font-mono">Elevation</div>
-          </div>
-        </div>
-      </div>
+      {/* 5. Persistent Glassmorphic Cockpit HUD (Universal Across Both Engines, Above Dock) */}
+      <CockpitHUD
+        onVehicleChange={(vId) => {
+          if (setActiveVehicleId) setActiveVehicleId(vId);
+        }}
+      />
 
       {/* 6. Selected Node Telemetry Badge */}
       {selectedNode && (() => {

@@ -698,3 +698,164 @@ export function createProceduralTruck({
 
   return truckGroup;
 }
+
+/**
+ * 8. 3D Procedural Roadblock Barricade & Hazard Warning Beacons
+ * Renders concrete Jersey bases, chevron striped hazard crossbars,
+ * road closure warning placard, traffic cones, and flashing emergency strobe beacons.
+ *
+ * @param {Object} [options]
+ * @param {Array<number>} [options.pos=[14, 9.8, -24]]
+ * @param {number} [options.rotationY=0.4]
+ * @returns {THREE.Group}
+ */
+export function createRoadblockBarricade({
+  pos = [14, 9.8, -24],
+  rotationY = 0.45
+} = {}) {
+  const group = new THREE.Group();
+  group.name = 'RoadblockBarricade_Kasara';
+  group.position.set(pos[0], pos[1], pos[2]);
+  group.rotation.y = rotationY;
+  group.userData = { isRoadblock: true, roadblockId: 'RB-KASARA-01' };
+
+  // Concrete Jersey Barriers Base
+  const barrierGeo = new THREE.BoxGeometry(4.2, 0.9, 0.7);
+  const barrierMat = new THREE.MeshStandardMaterial({
+    color: 0x334155,
+    roughness: 0.8,
+    metalness: 0.2
+  });
+  const barrierMesh = new THREE.Mesh(barrierGeo, barrierMat);
+  barrierMesh.position.set(0, 0.45, 0);
+  barrierMesh.castShadow = true;
+  barrierMesh.receiveShadow = true;
+  group.add(barrierMesh);
+
+  // Chevron Striped Warning Plate (Reflective Safety Amber & Red)
+  const chevronGeo = new THREE.BoxGeometry(4.4, 0.45, 0.12);
+  const chevronMat = new THREE.MeshStandardMaterial({
+    color: 0xff1744, // Bright hazard red
+    roughness: 0.3,
+    metalness: 0.5,
+    emissive: 0x7f0000,
+    emissiveIntensity: 0.5
+  });
+  const upperChevron = new THREE.Mesh(chevronGeo, chevronMat);
+  upperChevron.position.set(0, 1.45, 0);
+  group.add(upperChevron);
+
+  const lowerChevronMat = new THREE.MeshStandardMaterial({
+    color: 0xffb703, // Safety amber
+    roughness: 0.3,
+    metalness: 0.5,
+    emissive: 0xb45309,
+    emissiveIntensity: 0.4
+  });
+  const lowerChevron = new THREE.Mesh(chevronGeo, lowerChevronMat);
+  lowerChevron.position.set(0, 0.95, 0);
+  group.add(lowerChevron);
+
+  // Steel Support Uprights
+  const uprightGeo = new THREE.CylinderGeometry(0.08, 0.08, 1.8, 8);
+  const steelMat = new THREE.MeshStandardMaterial({
+    color: 0x94a3b8,
+    roughness: 0.3,
+    metalness: 0.8
+  });
+
+  const uprightL = new THREE.Mesh(uprightGeo, steelMat);
+  uprightL.position.set(-1.8, 0.9, 0);
+  group.add(uprightL);
+
+  const uprightR = new THREE.Mesh(uprightGeo, steelMat);
+  uprightR.position.set(1.8, 0.9, 0);
+  group.add(uprightR);
+
+  // Road Closure Warning Sign Board
+  const signBoardGeo = new THREE.BoxGeometry(2.4, 0.75, 0.08);
+  const signBoardMat = new THREE.MeshStandardMaterial({
+    color: 0xd97706, // Deep amber orange
+    roughness: 0.4,
+    metalness: 0.3
+  });
+  const signBoard = new THREE.Mesh(signBoardGeo, signBoardMat);
+  signBoard.position.set(0, 2.05, 0);
+  group.add(signBoard);
+
+  // Sign text border outline
+  const signBorderGeo = new THREE.BoxGeometry(2.5, 0.85, 0.04);
+  const signBorderMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+  const signBorder = new THREE.Mesh(signBorderGeo, signBorderMat);
+  signBorder.position.set(0, 2.05, -0.03);
+  group.add(signBorder);
+
+  // Flashing Emergency Strobe Hazard Beacons (Left & Right)
+  const beaconDomeGeo = new THREE.SphereGeometry(0.22, 12, 12);
+  const beaconAmberMat = new THREE.MeshBasicMaterial({
+    color: 0xfbbf24
+  });
+  const beaconRedMat = new THREE.MeshBasicMaterial({
+    color: 0xef4444
+  });
+
+  const beaconLeft = new THREE.Mesh(beaconDomeGeo, beaconAmberMat);
+  beaconLeft.position.set(-1.8, 1.95, 0);
+  group.add(beaconLeft);
+
+  const beaconRight = new THREE.Mesh(beaconDomeGeo, beaconRedMat);
+  beaconRight.position.set(1.8, 1.95, 0);
+  group.add(beaconRight);
+
+  // Dynamic Strobe Point Light (illuminates road and surroundings)
+  const strobeLight = new THREE.PointLight(0xff5400, 3.5, 24, 1.2);
+  strobeLight.position.set(0, 2.2, 0.5);
+  strobeLight.castShadow = true;
+  group.add(strobeLight);
+
+  // Reflective Traffic Cones
+  const coneGeo = new THREE.ConeGeometry(0.3, 0.85, 12);
+  const coneMat = new THREE.MeshStandardMaterial({
+    color: 0xff5400,
+    roughness: 0.5,
+    metalness: 0.2
+  });
+  const coneStripeGeo = new THREE.CylinderGeometry(0.2, 0.25, 0.2, 12);
+  const coneStripeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+  const conePositions = [
+    [-2.6, 0.42, 1.8],
+    [-1.2, 0.42, 2.8],
+    [1.2, 0.42, 2.8],
+    [2.6, 0.42, 1.8]
+  ];
+
+  conePositions.forEach(([cx, cy, cz]) => {
+    const coneGroup = new THREE.Group();
+    coneGroup.position.set(cx, cy, cz);
+
+    const cone = new THREE.Mesh(coneGeo, coneMat);
+    cone.castShadow = true;
+    coneGroup.add(cone);
+
+    const stripe = new THREE.Mesh(coneStripeGeo, coneStripeMat);
+    stripe.position.y = 0.05;
+    coneGroup.add(stripe);
+
+    group.add(coneGroup);
+  });
+
+  // Attach dynamic animation controller
+  group.beacons = [beaconLeft, beaconRight];
+  group.strobeLight = strobeLight;
+  group.update = (time) => {
+    // Alternating sharp flash pattern (police/hazard strobe)
+    const flash = Math.sin(time * 0.012) > 0.1;
+    strobeLight.intensity = flash ? 4.5 : 0.4;
+    beaconLeft.scale.setScalar(flash ? 1.35 : 0.85);
+    beaconRight.scale.setScalar(flash ? 0.85 : 1.35);
+  };
+
+  return group;
+}
+

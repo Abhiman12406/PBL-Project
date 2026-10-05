@@ -5,12 +5,12 @@ Connect the 3D twin to the backend real-time WebSocket (`/ws/telemetry`) and con
 
 **Blocked by:** 02: Three.js / R3F Procedural Logistics World & 3rd-Person Chase Cam
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] A persistent glassmorphic Cockpit HUD displays above the Dock toolbar with real-time telemetry metrics.
-- [ ] Simulation Play/Pause/Step and speed multiplier (1x, 2x, 5x) controls successfully dispatch to backend telemetry APIs and update the simulation clock.
-- [ ] Active vehicle switcher toggles the 3rd-person camera focus between `TRK-MH-01` (Nashik corridor) and `TRK-MH-02` (Pune expressway).
-- [ ] Telemetry gauge cluster renders live speed, SoC percentage, and cargo temperature with amber/red excursion alerts if cold-chain breaches 2°C–8°C.
-- [ ] Quick-action button triggers the Kasara Ghat landslide disruption, rendering 3D hazard barricades and blinking beacons on the road mesh.
-- [ ] Triggering the roadblock causes the truck to execute a smooth detour turn onto the Malshej Ghat bypass route with updated ETA and reroute notification.
-- [ ] Automated tests verify WebSocket message ingestion, state updates, and detour polyline switching.
+- [x] A persistent glassmorphic Cockpit HUD displays above the Dock toolbar with real-time telemetry metrics.
+- [x] Simulation Play/Pause/Step and speed multiplier (1x, 2x, 5x) controls successfully dispatch to backend telemetry APIs and update the simulation clock.
+- [x] Active vehicle switcher toggles the 3rd-person camera focus between `TRK-MH-01` (Nashik corridor) and `TRK-MH-02` (Pune expressway).
+- [x] Telemetry gauge cluster renders live speed, SoC percentage, and cargo temperature with amber/red excursion alerts if cold-chain breaches 2°C–8°C.
+- [x] Quick-action button triggers the Kasara Ghat landslide disruption, rendering 3D hazard barricades and blinking beacons on the road mesh.
+- [x] Triggering the roadblock causes the truck to execute a smooth detour turn onto the Malshej Ghat bypass route with updated ETA and reroute notification.
+- [x] Automated tests verify WebSocket message ingestion, state updates, and detour polyline switching.

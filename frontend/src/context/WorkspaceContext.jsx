@@ -93,6 +93,15 @@ export function WorkspaceProvider({ children }) {
   const [activeStageEngine, setActiveStageEngine] = useState('tactical_3d'); // 'tactical_3d' | 'cesium_gis'
   const [pipMinimized, setPipMinimized] = useState(false);
   const [selectedFacilityId, setSelectedFacilityId] = useState('DC-BHW-01');
+  const [activeVehicleId, setActiveVehicleId] = useState('TRK-MH-01');
+  const [activeRoadblocks, setActiveRoadblocks] = useState([]);
+  const [simState, setSimState] = useState({
+    is_running: false,
+    speed_multiplier: 1.0,
+    elapsed_seconds: 0,
+    elapsed_formatted: '00:00:00',
+    simulated_time: '08:00:00 AM'
+  });
 
   const toggleStageEngine = useCallback(() => {
     setActiveStageEngine((prev) => (prev === 'tactical_3d' ? 'cesium_gis' : 'tactical_3d'));
@@ -396,6 +405,12 @@ export function WorkspaceProvider({ children }) {
     setPipMinimized,
     selectedFacilityId,
     setSelectedFacilityId,
+    activeVehicleId,
+    setActiveVehicleId,
+    activeRoadblocks,
+    setActiveRoadblocks,
+    simState,
+    setSimState,
     openWindow,
     closeWindow,
     minimizeWindow,
@@ -417,6 +432,9 @@ export function WorkspaceProvider({ children }) {
     toggleStageEngine,
     pipMinimized,
     selectedFacilityId,
+    activeVehicleId,
+    activeRoadblocks,
+    simState,
     openWindow,
     closeWindow,
     minimizeWindow,

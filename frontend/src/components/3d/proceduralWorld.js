@@ -54,7 +54,7 @@ export function buildCorridorSplines() {
     southernCurve = new THREE.CatmullRomCurve3(southVecs, false, 'catmullrom', 0.2);
   }
 
-  // Kasara Ghat Mudslide Alternate Bypass Curve
+  // Kasara Ghat Mudslide Alternate Bypass Curve (Bhiwandi -> Malshej -> Nashik)
   let bypassCurve = null;
   if (bhwNskLink && bhwNskLink.alternative_route) {
     const bypassWorldPts = projectCorridorWaypoints(bhwNskLink.alternative_route.geometry);
@@ -62,11 +62,23 @@ export function buildCorridorSplines() {
     bypassCurve = new THREE.CatmullRomCurve3(bypassVecs, false, 'catmullrom', 0.2);
   }
 
+  // Full Detour Trajectory: JNPT -> Bhiwandi -> Kalyan -> Malshej Ghat -> Nashik
+  let fullDetourWaypoints = [];
+  let fullDetourCurve = null;
+  if (jnptBhwLink && bhwNskLink && bhwNskLink.alternative_route) {
+    fullDetourWaypoints = [...jnptBhwLink.geometry, ...bhwNskLink.alternative_route.geometry.slice(1)];
+    const fullDetourWorldPts = projectCorridorWaypoints(fullDetourWaypoints);
+    const fullDetourVecs = fullDetourWorldPts.map((pt) => new THREE.Vector3(pt[0], pt[1], pt[2]));
+    fullDetourCurve = new THREE.CatmullRomCurve3(fullDetourVecs, false, 'catmullrom', 0.2);
+  }
+
   return {
     mainCorridorCurve,
     southernCurve,
     bypassCurve,
-    waypointCount: rawWaypoints.length
+    fullDetourCurve,
+    waypointCount: rawWaypoints.length,
+    fullDetourWaypointCount: fullDetourWaypoints.length
   };
 }
 
