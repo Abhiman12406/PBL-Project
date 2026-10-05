@@ -26,6 +26,7 @@ import {
 import { api } from '../services/api';
 import { telemetryWS } from '../services/websocket';
 import SimulationBar from './SimulationBar';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 // Fix Leaflet standard marker icon paths in Vite
 delete L.Icon.Default.prototype._getIconUrl;
@@ -305,6 +306,14 @@ function getRoadblockPopupHtml(rb) {
 }
 
 export default function RoutingTab() {
+  const workspace = useWorkspace();
+  const selectedFacilityId = workspace?.selectedFacilityId;
+  const activeVehicleId = workspace?.activeVehicleId;
+  const selectFacility = workspace?.selectFacility;
+  const selectVehicle = workspace?.selectVehicle;
+  const trigger3DFlyTo = workspace?.trigger3DFlyTo;
+  const triggerRouteOptimization = workspace?.triggerRouteOptimization;
+
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const routePolylineRef = useRef(null);
@@ -336,6 +345,50 @@ export default function RoutingTab() {
   const [activeRoadblocks, setActiveRoadblocks] = useState([]);
   const [rerouteAlert, setRerouteAlert] = useState(null);
   const [trackedVehicleId, setTrackedVehicleId] = useState('TRK-MH-01');
+
+  // Synchronize 3D stage vehicle selection
+  useEffect(() => {
+    if (activeVehicleId && activeVehicleId !== trackedVehicleId) {
+      setTrackedVehicleId(activeVehicleId);
+      setSelectedVehicleId(activeVehicleId);
+    }
+  }, [activeVehicleId]);
+
+  // Synchronize 3D stage facility selection to depot
+  useEffect(() => {
+    if (selectedFacilityId && fixtures?.depots?.some(d => d.node_id === selectedFacilityId)) {
+      setSelectedDepotId(selectedFacilityId);
+    }
+  }, [selectedFacilityId, fixtures]);
+
+  const handleSelectTrackedVehicle = (vId) => {
+    setTrackedVehicleId(vId);
+    setSelectedVehicleId(vId);
+    if (selectVehicle) selectVehicle(vId);
+    if (trigger3DFlyTo) trigger3DFlyTo({ type: 'vehicle', id: vId });
+  };
+
+  const handleSelectDepot = (nodeId) => {
+    setSelectedDepotId(nodeId);
+    if (selectFacility) selectFacility(nodeId);
+    if (trigger3DFlyTo) trigger3DFlyTo({ type: 'facility', id: nodeId });
+  };
+
+  const handleFlyToStop = (wp) => {
+    if (trigger3DFlyTo) {
+      trigger3DFlyTo({
+        type: 'facility',
+        id: wp.node_id || wp.id || 'DC-BHW-01',
+        name: wp.name || wp.city
+      });
+    }
+  };
+
+  const handleFlyToCorridor = () => {
+    if (trigger3DFlyTo) {
+      trigger3DFlyTo({ type: 'route', id: 'NH-160' });
+    }
+  };
 
   // 1. Fetch initial routing fixtures
   const fetchFixtures = useCallback(async () => {
@@ -575,6 +628,9 @@ export default function RoutingTab() {
 
       const result = await api.optimizeRoute(payload);
       setRouteResult(result);
+      if (triggerRouteOptimization) {
+        triggerRouteOptimization(result);
+      }
     } catch (err) {
       console.error('Optimization error:', err);
       setErrorMessage(err.message || 'Route optimization failed.');
@@ -674,6 +730,9 @@ export default function RoutingTab() {
 
       const updated = await api.assignBackhaul(payload);
       setRouteResult(updated);
+      if (triggerRouteOptimization) {
+        triggerRouteOptimization(updated);
+      }
       setBackhaulSuccessMessage(`Successfully assigned return backhaul ${backhaulId}! Eliminated ${updated.empty_km_eliminated} unladen empty kilometers.`);
     } catch (err) {
       console.error('Failed to assign backhaul:', err);
@@ -765,35 +824,44 @@ export default function RoutingTab() {
       )}
 
       {/* 2. Tab Header Banner */}
-      <div className="bright-card rounded-2xl p-6 bg-white border-2 border-slate-200">
+      <div className="cyber-glass rounded-2xl p-6 bg-slate-900/60 border border-slate-700/60 backdrop-blur-md shadow-lg">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-md border border-emerald-300">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded-md border border-emerald-500/40">
                 DRL Fleet Dispatcher Console
               </span>
-              <span className="text-xs text-slate-300">•</span>
-              <span className="text-xs font-semibold text-slate-600">
+              <span className="text-xs text-slate-600">•</span>
+              <span className="text-xs font-semibold text-slate-400">
                 PyTorch Neural VRP & Live Telemetry Stream
               </span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
               Route & Fleet Optimizer
-              <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700">
+              <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300">
                 Western India Corridor
               </span>
             </h2>
-            <p className="text-xs sm:text-sm font-medium text-slate-600 max-w-3xl mt-1.5 leading-relaxed">
+            <p className="text-xs sm:text-sm font-medium text-slate-400 max-w-3xl mt-1.5 leading-relaxed">
               Dynamically solve optimal multi-stop vehicle schedules across Mumbai, JNPT, Thane, Kasara Ghat, Nashik, and Pune. 
               Track animated truck coordinates, cold-chain temperature telematics, and autonomous roadblock detours in real time.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={handleFlyToCorridor}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs sm:text-sm font-extrabold transition-all duration-150 flex items-center gap-2 shadow-sm active:scale-[0.98] cursor-pointer"
+              title="Fly 3D Camera along Corridor Spline"
+            >
+              <Compass className="w-4 h-4" />
+              <span>Fly 3D Corridor</span>
+            </button>
+
             <button
               onClick={handleOptimizeRoute}
               disabled={optimizing || isOverCapacity}
-              className="px-5 py-2.5 rounded-xl bg-[#FF5400] hover:bg-[#e04a00] text-white text-xs sm:text-sm font-extrabold transition-all duration-150 flex items-center gap-2 shadow-sm active:scale-[0.98] disabled:opacity-50"
+              className="px-5 py-2.5 rounded-xl bg-[#FF5400] hover:bg-[#e04a00] text-white text-xs sm:text-sm font-extrabold transition-all duration-150 flex items-center gap-2 shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer"
             >
               <Zap className={`w-4 h-4 ${optimizing ? 'animate-spin' : ''}`} />
               <span>{optimizing ? 'Solving Neural VRP...' : 'Re-Optimize Route'}</span>
@@ -803,22 +871,22 @@ export default function RoutingTab() {
 
         {/* Global Error Banner */}
         {errorMessage && (
-          <div className="mt-4 p-3.5 rounded-xl bg-rose-50 border-2 border-rose-300 text-xs font-bold text-rose-800 flex items-center gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 stroke-[2.5]" />
+          <div className="mt-4 p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/60 text-xs font-bold text-rose-200 flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 stroke-[2.5]" />
             <span>{errorMessage}</span>
           </div>
         )}
 
         {/* Backhaul Success Banner */}
         {backhaulSuccessMessage && (
-          <div className="mt-4 p-3.5 rounded-xl bg-emerald-50 border-2 border-emerald-300 text-xs font-bold text-emerald-800 flex items-center justify-between gap-2.5">
+          <div className="mt-4 p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/60 text-xs font-bold text-emerald-200 flex items-center justify-between gap-2.5">
             <div className="flex items-center gap-2.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 stroke-[2.5]" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 stroke-[2.5]" />
               <span>{backhaulSuccessMessage}</span>
             </div>
             <button 
               onClick={() => setBackhaulSuccessMessage(null)}
-              className="text-emerald-700 hover:text-emerald-900 underline text-[11px]"
+              className="text-emerald-400 hover:text-emerald-300 underline text-[11px] cursor-pointer"
             >
               Dismiss
             </button>
@@ -827,30 +895,30 @@ export default function RoutingTab() {
       </div>
 
       {/* 3. Live Telematics Sensor Telemetry Dashboard Card */}
-      <div className="bright-card p-5 rounded-2xl bg-white border-2 border-slate-200 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      <div className="cyber-glass p-5 rounded-2xl bg-slate-900/60 border border-slate-700/60 backdrop-blur-md shadow-lg space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2.5">
-            <Radio className="w-4 h-4 text-emerald-600 animate-pulse" />
-            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+            <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-white">
               Live Vehicle IoT Telemetry Stream
             </h3>
-            <span className="text-[10px] font-mono-num font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300">
+            <span className="text-[10px] font-mono-num font-bold px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-500/40">
               1.0 Hz Cadence
             </span>
           </div>
 
           {/* Vehicle Switcher */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase">Track Unit:</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase">Track Unit:</span>
             <div className="flex gap-1">
               {['TRK-MH-01', 'TRK-MH-02'].map(vId => (
                 <button
                   key={vId}
-                  onClick={() => setTrackedVehicleId(vId)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition ${
+                  onClick={() => handleSelectTrackedVehicle(vId)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition cursor-pointer ${
                     trackedVehicleId === vId
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
                   {vId}
@@ -962,23 +1030,22 @@ export default function RoutingTab() {
       {/* 4. Control Panel Grid: Vehicle, Traffic, Depot, Capacity Utilization */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Fleet Vehicle Selector */}
-        <div className="bright-card p-4 rounded-xl bg-white border border-slate-200 space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+        <div className="cyber-glass p-4 rounded-xl bg-slate-900/60 border border-slate-700/60 backdrop-blur-md space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
             <span className="flex items-center gap-1.5">
-              <Truck className="w-3.5 h-3.5 text-orange-600" />
+              <Truck className="w-3.5 h-3.5 text-orange-400" />
               Active Fleet Unit
             </span>
-            <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono-num font-bold">
+            <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300 font-mono-num font-bold">
               {selectedVehicle?.plate_number || 'TRUCK'}
             </span>
           </div>
           <select
             value={selectedVehicleId}
             onChange={(e) => {
-              setSelectedVehicleId(e.target.value);
-              setTrackedVehicleId(e.target.value);
+              handleSelectTrackedVehicle(e.target.value);
             }}
-            className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg p-2 text-slate-900 focus:outline-none focus:border-orange-500"
+            className="w-full text-xs font-bold bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-orange-500"
           >
             {fixtures?.fleet_vehicles?.map(v => (
               <option key={v.vehicle_id} value={v.vehicle_id}>
@@ -986,27 +1053,33 @@ export default function RoutingTab() {
               </option>
             ))}
           </select>
-          <div className="text-[11px] font-semibold text-slate-500 flex justify-between">
+          <div className="text-[11px] font-semibold text-slate-400 flex justify-between">
             <span>Payload Limit:</span>
-            <span className="font-mono-num text-slate-800 font-bold">{maxCap.toLocaleString()} kg</span>
+            <span className="font-mono-num text-white font-bold">{maxCap.toLocaleString()} kg</span>
           </div>
         </div>
 
         {/* 2. Central Depot Selector */}
-        <div className="bright-card p-4 rounded-xl bg-white border border-slate-200 space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+        <div className="cyber-glass p-4 rounded-xl bg-slate-900/60 border border-slate-700/60 backdrop-blur-md space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
             <span className="flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-orange-600" />
+              <MapPin className="w-3.5 h-3.5 text-orange-400" />
               Corridor Central Depot
             </span>
-            <span className="text-[10px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded font-bold uppercase">
-              Origin
-            </span>
+            <button
+              type="button"
+              onClick={() => handleSelectDepot(selectedDepotId)}
+              className="text-[10px] bg-orange-950/80 text-orange-300 hover:text-white border border-orange-500/40 px-1.5 py-0.5 rounded font-bold uppercase cursor-pointer flex items-center gap-1"
+              title="Fly 3D Camera to Depot Node"
+            >
+              <Compass className="w-2.5 h-2.5" />
+              <span>Fly 3D</span>
+            </button>
           </div>
           <select
             value={selectedDepotId}
-            onChange={(e) => setSelectedDepotId(e.target.value)}
-            className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg p-2 text-slate-900 focus:outline-none focus:border-orange-500"
+            onChange={(e) => handleSelectDepot(e.target.value)}
+            className="w-full text-xs font-bold bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-orange-500"
           >
             {fixtures?.depots?.map(d => (
               <option key={d.node_id} value={d.node_id}>
@@ -1014,58 +1087,58 @@ export default function RoutingTab() {
               </option>
             ))}
           </select>
-          <div className="text-[11px] font-semibold text-slate-500">
+          <div className="text-[11px] font-semibold text-slate-400">
             Automated return routing to central corridor origin
           </div>
         </div>
 
         {/* 3. Traffic Congestion Mode Selector */}
-        <div className="bright-card p-4 rounded-xl bg-white border border-slate-200 space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+        <div className="cyber-glass p-4 rounded-xl bg-slate-900/60 border border-slate-700/60 backdrop-blur-md space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
             <span className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-orange-600" />
+              <Clock className="w-3.5 h-3.5 text-orange-400" />
               Corridor Traffic Flow
             </span>
-            <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-bold">
+            <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300 font-bold">
               {trafficMode}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-lg">
+          <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
             <button
               onClick={() => setTrafficMode('STANDARD')}
-              className={`py-1.5 text-xs font-bold rounded-md transition ${
-                trafficMode === 'STANDARD' ? 'bg-white shadow-xs text-slate-900' : 'text-slate-600 hover:text-slate-900'
+              className={`py-1.5 text-xs font-bold rounded-md transition cursor-pointer ${
+                trafficMode === 'STANDARD' ? 'bg-slate-800 shadow-xs text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
               Standard
             </button>
             <button
               onClick={() => setTrafficMode('CONGESTED')}
-              className={`py-1.5 text-xs font-bold rounded-md transition ${
-                trafficMode === 'CONGESTED' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              className={`py-1.5 text-xs font-bold rounded-md transition cursor-pointer ${
+                trafficMode === 'CONGESTED' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
               }`}
             >
               Congested
             </button>
           </div>
-          <div className="text-[11px] font-medium text-slate-500">
+          <div className="text-[11px] font-medium text-slate-400">
             {trafficMode === 'CONGESTED' ? 'Kasara Ghat & Thane toll delays active (+65% duration)' : 'Clear highway flow along NH-48 / NH-160'}
           </div>
         </div>
 
         {/* 4. Vehicle Payload Utilization Bar */}
-        <div className="bright-card p-4 rounded-xl bg-white border border-slate-200 space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+        <div className="cyber-glass p-4 rounded-xl bg-slate-900/60 border border-slate-700/60 backdrop-blur-md space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
             <span className="flex items-center gap-1.5">
-              <Package className="w-3.5 h-3.5 text-orange-600" />
+              <Package className="w-3.5 h-3.5 text-orange-400" />
               Payload Capacity
             </span>
-            <span className={`text-xs font-mono-num font-extrabold ${isOverCapacity ? 'text-rose-600' : 'text-slate-800'}`}>
+            <span className={`text-xs font-mono-num font-extrabold ${isOverCapacity ? 'text-rose-400' : 'text-white'}`}>
               {capacityPct}%
             </span>
           </div>
 
-          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+          <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
             <div
               className={`h-full rounded-full transition-all duration-300 ${
                 isOverCapacity
@@ -1078,9 +1151,9 @@ export default function RoutingTab() {
             />
           </div>
 
-          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
-            <span>Loaded: <strong className="text-slate-800 font-mono-num">{currentTotalWeight.toLocaleString()} kg</strong></span>
-            <span>Rem: <strong className="text-slate-800 font-mono-num">{Math.max(0, maxCap - currentTotalWeight).toLocaleString()} kg</strong></span>
+          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400">
+            <span>Loaded: <strong className="text-white font-mono-num">{currentTotalWeight.toLocaleString()} kg</strong></span>
+            <span>Rem: <strong className="text-white font-mono-num">{Math.max(0, maxCap - currentTotalWeight).toLocaleString()} kg</strong></span>
           </div>
         </div>
       </div>
@@ -1376,15 +1449,15 @@ export default function RoutingTab() {
           </div>
 
           {/* Turn-by-Turn Waypoint Sequence Table */}
-          <div className="bright-card p-5 rounded-2xl bg-white border-2 border-slate-200 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+          <div className="cyber-glass p-5 rounded-2xl bg-slate-900/60 border border-slate-700/60 backdrop-blur-md space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-orange-600" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                <Layers className="w-4 h-4 text-orange-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white">
                   Turn-by-Turn Waypoint Sequence
                 </h3>
               </div>
-              <span className="text-[11px] font-mono-num text-slate-500">
+              <span className="text-[11px] font-mono-num text-slate-400">
                 Chronological Order
               </span>
             </div>
@@ -1392,42 +1465,54 @@ export default function RoutingTab() {
             <div className="overflow-x-auto max-h-56">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                  <tr className="border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
                     <th className="pb-2">Stop</th>
                     <th className="pb-2">Destination / Type</th>
                     <th className="pb-2 text-right">ETA</th>
                     <th className="pb-2 text-right">Leg Dist</th>
                     <th className="pb-2 text-right">Capacity Rem</th>
+                    <th className="pb-2 text-right">3D Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-800/60 text-slate-200">
                   {routeResult?.waypoints_sequence?.map((wp) => (
-                    <tr key={wp.stop_order} className="hover:bg-slate-50 transition">
-                      <td className="py-2 font-mono-num font-bold text-slate-800">
+                    <tr key={wp.stop_order} className="hover:bg-slate-800/40 transition">
+                      <td className="py-2 font-mono-num font-bold text-white">
                         #{wp.stop_order}
                       </td>
                       <td className="py-2">
-                        <div className="font-bold text-slate-900 truncate max-w-[130px]">
+                        <div className="font-bold text-white truncate max-w-[130px]">
                           {wp.name || wp.type}
                         </div>
                         <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
                           wp.type === 'DEPOT' 
-                            ? 'bg-orange-100 text-orange-800' 
+                            ? 'bg-orange-950 text-orange-300 border border-orange-500/40' 
                             : wp.type.startsWith('BACKHAUL')
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-slate-100 text-slate-700'
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-slate-800 text-slate-300'
                         }`}>
                           {wp.type}
                         </span>
                       </td>
-                      <td className="py-2 text-right font-mono-num font-semibold text-slate-800">
+                      <td className="py-2 text-right font-mono-num font-semibold text-slate-300">
                         {new Date(wp.arrival_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </td>
-                      <td className="py-2 text-right font-mono-num text-slate-600">
+                      <td className="py-2 text-right font-mono-num text-slate-400">
                         {wp.distance_from_prev_km} km
                       </td>
-                      <td className="py-2 text-right font-mono-num font-semibold text-slate-800">
+                      <td className="py-2 text-right font-mono-num font-semibold text-slate-300">
                         {wp.remaining_capacity_kg?.toLocaleString()} kg
+                      </td>
+                      <td className="py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleFlyToStop(wp)}
+                          className="px-2 py-0.5 rounded bg-slate-800 hover:bg-orange-600 text-slate-300 hover:text-white text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                          title="Fly 3D Camera to Stop"
+                        >
+                          <Compass className="w-2.5 h-2.5" />
+                          <span>3D</span>
+                        </button>
                       </td>
                     </tr>
                   ))}

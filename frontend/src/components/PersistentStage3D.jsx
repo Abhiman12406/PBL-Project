@@ -93,7 +93,21 @@ export default function PersistentStage3D({ onSelectNode }) {
     setActiveVehicleId,
     activeRoadblocks = [],
     setActiveRoadblocks,
-    simState
+    simState,
+    flyToTarget,
+    highlightedRoute,
+    setHighlightedRoute,
+    activeFacilityGlow,
+    setActiveFacilityGlow,
+    activeIncident,
+    setActiveIncident,
+    demandHeatmapOverlay,
+    setDemandHeatmapOverlay,
+    optimalRouteOverlay,
+    setOptimalRouteOverlay,
+    selectFacility,
+    selectVehicle,
+    selectIncident
   } = useWorkspace();
 
   // Reactive UI State
@@ -130,6 +144,19 @@ export default function PersistentStage3D({ onSelectNode }) {
   // Active Vehicle & Roadblock sync references
   const activeVehicleIdRef = useRef('TRK-MH-01');
   const activeRoadblocksRef = useRef([]);
+
+  // Bi-directional 3D Overlay & Binding Refs
+  const highlightedRouteRef = useRef(null);
+  const activeFacilityGlowRef = useRef('DC-BHW-01');
+  const activeIncidentRef = useRef(null);
+  const demandHeatmapOverlayRef = useRef(demandHeatmapOverlay);
+  const optimalRouteOverlayRef = useRef(optimalRouteOverlay);
+
+  const disruptionZoneGroupRef = useRef(null);
+  const demandHeatmapGroupRef = useRef(null);
+  const optimalPathGroupRef = useRef(null);
+  const facilitiesMapRef = useRef({});
+  const highwayRibbonsRef = useRef({});
 
   // Multi-vehicle trajectory and mesh references
   const truck1GroupRef = useRef(null);
@@ -312,8 +339,9 @@ export default function PersistentStage3D({ onSelectNode }) {
     scene.add(mainRoadRibbon);
 
     // Southern Spur Road Ribbon (Bhiwandi -> Pune)
+    let southRoadRibbon = null;
     if (southernCurve) {
-      const southRoadRibbon = createExtrudedHighwayRibbon(southernCurve, {
+      southRoadRibbon = createExtrudedHighwayRibbon(southernCurve, {
         roadWidth: 1.6,
         roadSegments: 180,
         glowColor: 0x3b82f6,
@@ -323,8 +351,9 @@ export default function PersistentStage3D({ onSelectNode }) {
     }
 
     // Bypass Corridor Ribbon (Malshej Ghat Detour Route)
+    let bypassRoadRibbon = null;
     if (bypassCurve) {
-      const bypassRoadRibbon = createExtrudedHighwayRibbon(bypassCurve, {
+      bypassRoadRibbon = createExtrudedHighwayRibbon(bypassCurve, {
         roadWidth: 1.5,
         roadSegments: 160,
         glowColor: 0xffb703,
@@ -333,15 +362,22 @@ export default function PersistentStage3D({ onSelectNode }) {
       scene.add(bypassRoadRibbon);
     }
 
+    highwayRibbonsRef.current = {
+      main_corridor: mainRoadRibbon,
+      southern_corridor: southRoadRibbon,
+      detour_corridor: bypassRoadRibbon
+    };
+
     // 9. Animated Traffic Flow Light Pulses along highway lanes
     const { group: pulsesGroup, pulses } = createTrafficPulses(mainCorridorCurve, 10);
     scene.add(pulsesGroup);
     pulsesRef.current = pulses;
 
     // 10. Procedural 3D Logistics Structures at all Key Nodes
-    const { group: facilitiesGroup, rings } = createCorridorLogisticsNodes();
+    const { group: facilitiesGroup, rings, facilitiesMap } = createCorridorLogisticsNodes();
     scene.add(facilitiesGroup);
     ringsRef.current = rings;
+    facilitiesMapRef.current = facilitiesMap;
 
     // 11. 3D Procedural Roadblock Barricade at Kasara Ghat Mountain Pass
     const roadblockBarricade = createRoadblockBarricade({
@@ -352,9 +388,121 @@ export default function PersistentStage3D({ onSelectNode }) {
     scene.add(roadblockBarricade);
     roadblockGroupRef.current = roadblockBarricade;
 
-    // 12. Commercial Freight Fleet Vehicles
+    // 12. Kasara Ghat Disruption Hazard Zone (Aura Sphere & Shockwave Ring)
+    const disruptionZoneGroup = new THREE.Group();
+    disruptionZoneGroup.position.set(14, 9.8, -24);
+    const hazardSphereGeo = new THREE.SphereGeometry(7.5, 24, 24);
+    const hazardSphereMat = new THREE.MeshBasicMaterial({
+      color: 0xff1744,
+      transparent: true,
+      opacity: 0.22,
+      wireframe: true
+    });
+    const hazardSphere = new THREE.Mesh(hazardSphereGeo, hazardSphereMat);
+    hazardSphere.userData = { isDisruptionZone: true, incidentId: 'INC-KASARA-01' };
+    disruptionZoneGroup.add(hazardSphere);
+
+    const hazardRingGeo = new THREE.RingGeometry(5.5, 7.8, 32);
+    const hazardRingMat = new THREE.MeshBasicMaterial({
+      color: 0xff1744,
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide
+    });
+    const hazardRing = new THREE.Mesh(hazardRingGeo, hazardRingMat);
+    hazardRing.rotation.x = -Math.PI / 2;
+    hazardRing.position.y = 0.15;
+    hazardRing.userData = { isDisruptionZone: true, incidentId: 'INC-KASARA-01' };
+    disruptionZoneGroup.add(hazardRing);
+    disruptionZoneGroup.visible = false;
+    scene.add(disruptionZoneGroup);
+    disruptionZoneGroupRef.current = disruptionZoneGroup;
+
+    // 13. 3D Volumetric Demand Heatmap Pillars (Over Corridor Facilities)
+    const demandHeatmapGroup = new THREE.Group();
+    demandHeatmapGroup.name = 'VolumetricDemandHeatmapOverlays';
+    STAGE_FACILITIES.forEach((facility) => {
+      const defaultDemands = {
+        'PORT-JNPT-01': 4800,
+        'DC-BHW-01': 4200,
+        'HUB-THN-01': 2100,
+        'PASS-KASARA-01': 800,
+        'DEP-NSK-01': 3800,
+        'FC-PUN-01': 3500
+      };
+      const demandVal = demandHeatmapOverlayRef.current?.facilityDemands?.[facility.id] || defaultDemands[facility.id] || 3000;
+      const pillarHeight = Math.max(4.0, (demandVal / 1000) * 3.8);
+      const isHigh = demandVal > 4000;
+      const isMid = demandVal > 2500;
+      const pillarColor = isHigh ? 0xff5400 : isMid ? 0xffb703 : 0x06b6d4;
+
+      const pillarGeo = new THREE.CylinderGeometry(2.4, 2.8, pillarHeight, 16, 1, false);
+      const pillarMat = new THREE.MeshStandardMaterial({
+        color: pillarColor,
+        emissive: pillarColor,
+        emissiveIntensity: 0.45,
+        transparent: true,
+        opacity: 0.65,
+        roughness: 0.3,
+        metalness: 0.7
+      });
+      const pillarMesh = new THREE.Mesh(pillarGeo, pillarMat);
+      pillarMesh.position.set(facility.pos[0], facility.pos[1] + pillarHeight / 2, facility.pos[2]);
+
+      const capRingGeo = new THREE.RingGeometry(2.2, 2.6, 24);
+      const capRingMat = new THREE.MeshBasicMaterial({
+        color: pillarColor,
+        side: THREE.DoubleSide
+      });
+      const capRing = new THREE.Mesh(capRingGeo, capRingMat);
+      capRing.rotation.x = -Math.PI / 2;
+      capRing.position.set(facility.pos[0], facility.pos[1] + pillarHeight + 0.1, facility.pos[2]);
+
+      pillarMesh.userData = { isHeatmapPillar: true, facilityId: facility.id, baseHeight: pillarHeight };
+      demandHeatmapGroup.add(pillarMesh);
+      demandHeatmapGroup.add(capRing);
+    });
+    demandHeatmapGroup.visible = Boolean(demandHeatmapOverlayRef.current?.active);
+    scene.add(demandHeatmapGroup);
+    demandHeatmapGroupRef.current = demandHeatmapGroup;
+
+    // 14. 3D Optimal Path Vector Spline Overlay
+    const optimalPathGroup = new THREE.Group();
+    optimalPathGroup.name = 'OptimalPathVectorSpline';
+    const optimalSplineCurve = mainCorridorCurve;
+    const optimalTubeGeo = new THREE.TubeGeometry(optimalSplineCurve, 260, 0.32, 8, false);
+    const optimalTubeMat = new THREE.MeshBasicMaterial({
+      color: 0x00e676,
+      transparent: true,
+      opacity: 0.95
+    });
+    const optimalTubeMesh = new THREE.Mesh(optimalTubeGeo, optimalTubeMat);
+    optimalTubeMesh.position.y += 2.0;
+    optimalPathGroup.add(optimalTubeMesh);
+
+    // Traveling Vector Light Pulse Packets along Optimal Path
+    const optimalPulses = [];
+    for (let p = 0; p < 8; p++) {
+      const pGeo = new THREE.SphereGeometry(0.55, 12, 12);
+      const pMat = new THREE.MeshBasicMaterial({
+        color: 0xffd600, // Golden pulse
+        transparent: true,
+        opacity: 0.95
+      });
+      const pMesh = new THREE.Mesh(pGeo, pMat);
+      optimalPathGroup.add(pMesh);
+      optimalPulses.push({ mesh: pMesh, offset: p / 8, speed: 0.14 });
+    }
+    optimalPathGroup.pulses = optimalPulses;
+    optimalPathGroup.curve = optimalSplineCurve;
+    optimalPathGroup.visible = Boolean(optimalRouteOverlayRef.current?.active);
+    scene.add(optimalPathGroup);
+    optimalPathGroupRef.current = optimalPathGroup;
+
+    // 15. Commercial Freight Fleet Vehicles
     // Truck 1: TRK-MH-01 Reefer (Nashik Corridor, Cold-Chain Vaccines)
     const truck1Group = createProceduralTruck({
+      vehicleId: 'TRK-MH-01',
       cabColor: 0xff5400,
       trailerColor: 0xf8fafc,
       beaconColor: 0x10b981
@@ -364,6 +512,7 @@ export default function PersistentStage3D({ onSelectNode }) {
 
     // Truck 2: TRK-MH-02 EV Carrier (Pune Expressway, High-Tech Electronics)
     const truck2Group = createProceduralTruck({
+      vehicleId: 'TRK-MH-02',
       cabColor: 0x06b6d4,
       trailerColor: 0x1e293b,
       beaconColor: 0x3b82f6
@@ -403,18 +552,25 @@ export default function PersistentStage3D({ onSelectNode }) {
         pulse.mesh.position.y += 1.2;
       });
 
-      // Animate pulsing facility ground beacon rings
+      // Animate pulsing facility ground beacon rings with active entity glowing
+      const activeGlowId = activeFacilityGlowRef.current || selectedFacilityId;
       ringsRef.current.forEach((r) => {
-        r.scale += delta * 0.9;
-        if (r.scale > 2.8) r.scale = 1;
+        const isCurrentFacility = r.nodeId === activeGlowId;
+        const speed = isCurrentFacility ? 1.6 : 0.9;
+        r.scale += delta * speed;
+        if (r.scale > (isCurrentFacility ? 3.6 : 2.8)) r.scale = 1;
         r.mesh.scale.set(r.scale, r.scale, r.scale);
-        r.mesh.material.opacity = Math.max(0, 1 - (r.scale - 1) / 1.8);
+        r.mesh.material.opacity = Math.max(0, 1 - (r.scale - 1) / (isCurrentFacility ? 2.6 : 1.8));
+        if (isCurrentFacility && r.mesh.material.color) {
+          r.mesh.material.color.setHex(0x00e5ff); // High-intensity cyan aura
+        }
       });
 
-      // Check Roadblock status at Kasara Ghat
+      // Check Roadblock and Incident status at Kasara Ghat
       const isBlocked = (activeRoadblocksRef.current || []).some(
         (rb) => rb.roadblock_id === 'RB-KASARA-01' || rb.corridor_node === 'KSR'
       );
+      const hasIncident = Boolean(activeIncidentRef.current) || isBlocked;
 
       // Toggle 3D barricade visibility and animate hazard strobe beacons
       if (roadblockGroupRef.current) {
@@ -422,6 +578,47 @@ export default function PersistentStage3D({ onSelectNode }) {
         if (isBlocked && roadblockGroupRef.current.update) {
           roadblockGroupRef.current.update(time);
         }
+      }
+
+      // Animate Kasara Disruption Zone Hazard Aura Sphere
+      if (disruptionZoneGroupRef.current) {
+        disruptionZoneGroupRef.current.visible = hasIncident;
+        if (hasIncident) {
+          const pulseScale = 1.0 + Math.sin(time * 0.007) * 0.16;
+          disruptionZoneGroupRef.current.scale.set(pulseScale, pulseScale, pulseScale);
+          disruptionZoneGroupRef.current.rotation.y += delta * 0.35;
+        }
+      }
+
+      // Animate Route Conduits Glow
+      const activeRoute = highlightedRouteRef.current;
+      if (highwayRibbonsRef.current?.main_corridor?.centerLaneMat) {
+        const isMainHighlighted = activeRoute === 'main_corridor' || activeRoute === 'LINK-BHW-NSK';
+        highwayRibbonsRef.current.main_corridor.centerLaneMat.color.setHex(isMainHighlighted ? 0x00ffea : 0x00e5ff);
+      }
+      if (highwayRibbonsRef.current?.detour_corridor?.centerLaneMat) {
+        const isDetourHighlighted = activeRoute === 'detour_corridor' || activeRoute === 'malshej_bypass';
+        highwayRibbonsRef.current.detour_corridor.centerLaneMat.color.setHex(isDetourHighlighted ? 0xffea00 : 0xffb703);
+      }
+
+      // Animate 3D Volumetric Demand Heatmap Pillars (breathing pulse)
+      if (demandHeatmapGroupRef.current && demandHeatmapGroupRef.current.visible) {
+        const breathe = 1.0 + Math.sin(time * 0.004) * 0.05;
+        demandHeatmapGroupRef.current.children.forEach((child) => {
+          if (child.userData?.isHeatmapPillar) {
+            child.scale.set(breathe, 1.0, breathe);
+          }
+        });
+      }
+
+      // Animate 3D Optimal Path Vector Light Pulses
+      if (optimalPathGroupRef.current && optimalPathGroupRef.current.visible && optimalPathGroupRef.current.pulses && optimalPathGroupRef.current.curve) {
+        optimalPathGroupRef.current.pulses.forEach((pulse) => {
+          pulse.offset = (pulse.offset + delta * pulse.speed) % 1.0;
+          const pt = optimalPathGroupRef.current.curve.getPointAt(pulse.offset);
+          pulse.mesh.position.copy(pt);
+          pulse.mesh.position.y += 2.0;
+        });
       }
 
       // Active trajectory curves for both fleet vehicles
@@ -693,6 +890,67 @@ export default function PersistentStage3D({ onSelectNode }) {
     if (onSelectNode) onSelectNode(nodeId);
   }, [glideCameraTo, onSelectNode, setSelectedFacilityId]);
 
+  // Handle Bi-directional 3D Scene Fly-To Commands from Service Panels
+  useEffect(() => {
+    if (!flyToTarget) return;
+    const { type, id } = flyToTarget;
+
+    if (type === 'facility') {
+      const found = STAGE_FACILITIES.find((f) => f.id === id || f.code === id);
+      if (found) {
+        setSelectedNode(found);
+        glideCameraTo(
+          [found.pos[0] + 18, found.pos[1] + 15, found.pos[2] + 22],
+          found.pos
+        );
+      }
+    } else if (type === 'route') {
+      if (id === 'main_corridor' || id === 'LINK-BHW-NSK') {
+        glideCameraTo([0, 55, 15], [0, 5, -15]);
+      } else if (id === 'detour_corridor' || id === 'malshej_bypass' || id === 'LINK-MALSHEJ') {
+        glideCameraTo([14, 45, -10], [14, 8, -22]);
+      } else if (id === 'southern_corridor' || id === 'LINK-BHW-PUN') {
+        glideCameraTo([10, 48, 30], [10, 4, 20]);
+      } else {
+        glideCameraTo([0, 60, 20], [0, 5, -10]);
+      }
+    } else if (type === 'vehicle') {
+      setCameraMode(CAMERA_MODES.CHASE);
+    } else if (type === 'incident') {
+      glideCameraTo([28, 18, -12], [14, 9.8, -24]);
+    }
+  }, [flyToTarget, glideCameraTo]);
+
+  // Synchronize dynamic 3D visual overlays (Demand Heatmaps & Optimal Path Vectors)
+  useEffect(() => {
+    demandHeatmapOverlayRef.current = demandHeatmapOverlay;
+    if (demandHeatmapGroupRef.current) {
+      demandHeatmapGroupRef.current.visible = Boolean(demandHeatmapOverlay?.active);
+    }
+  }, [demandHeatmapOverlay]);
+
+  useEffect(() => {
+    optimalRouteOverlayRef.current = optimalRouteOverlay;
+    if (optimalPathGroupRef.current) {
+      optimalPathGroupRef.current.visible = Boolean(optimalRouteOverlay?.active);
+    }
+  }, [optimalRouteOverlay]);
+
+  useEffect(() => {
+    activeIncidentRef.current = activeIncident;
+    if (disruptionZoneGroupRef.current) {
+      disruptionZoneGroupRef.current.visible = Boolean(activeIncident || (activeRoadblocks && activeRoadblocks.length > 0));
+    }
+  }, [activeIncident, activeRoadblocks]);
+
+  useEffect(() => {
+    activeFacilityGlowRef.current = activeFacilityGlow;
+  }, [activeFacilityGlow]);
+
+  useEffect(() => {
+    highlightedRouteRef.current = highlightedRoute;
+  }, [highlightedRoute]);
+
   // Select camera view preset
   const handleSelectView = (presetKey) => {
     const preset = CAMERA_VIEWS[presetKey];
@@ -794,7 +1052,7 @@ export default function PersistentStage3D({ onSelectNode }) {
     }
   };
 
-  // Raycasting click to inspect 3D logistics node beacons
+  // Raycasting click to inspect 3D logistics node beacons, vehicles, and roadblocks
   const handleCanvasClick = (e) => {
     if (!canvasRef.current || !cameraRef.current || !sceneRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
@@ -807,19 +1065,54 @@ export default function PersistentStage3D({ onSelectNode }) {
     raycaster.setFromCamera(mouse, cameraRef.current);
     const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
 
-    const hit = intersects.find((i) => i.object.userData && i.object.userData.isFacility);
-    if (hit) {
-      const nodeId = hit.object.userData.nodeId;
+    // 1. Check for Vehicle Hit (Commercial Trucks)
+    const vehicleHit = intersects.find((i) => i.object.userData && i.object.userData.isVehicle);
+    if (vehicleHit) {
+      const vId = vehicleHit.object.userData.vehicleId || 'TRK-MH-01';
+      if (selectVehicle) {
+        selectVehicle(vId);
+      } else if (setActiveVehicleId) {
+        setActiveVehicleId(vId);
+      }
+      setCameraMode(CAMERA_MODES.CHASE);
+      return;
+    }
+
+    // 2. Check for Roadblock / Disruption Zone Hit
+    const roadblockHit = intersects.find((i) => i.object.userData && (i.object.userData.isRoadblock || i.object.userData.isDisruptionZone));
+    if (roadblockHit) {
+      if (selectIncident) {
+        selectIncident({
+          id: 'INC-KASARA-01',
+          name: 'Kasara Ghat Torrential Mudslide Hazard',
+          location: 'Kasara Ghat Pass NH-160 km 118',
+          severity: 'CRITICAL',
+          roadblockId: 'RB-KASARA-01'
+        });
+      }
+      glideCameraTo([28, 18, -12], [14, 9.8, -24]);
+      return;
+    }
+
+    // 3. Check for Logistics Facility Hit
+    const facilityHit = intersects.find((i) => i.object.userData && i.object.userData.isFacility);
+    if (facilityHit) {
+      const nodeId = facilityHit.object.userData.nodeId;
       const foundNode = STAGE_FACILITIES.find((n) => n.id === nodeId);
       if (foundNode) {
         setSelectedNode(foundNode);
-        if (setSelectedFacilityId) setSelectedFacilityId(foundNode.id);
+        if (selectFacility) {
+          selectFacility(foundNode.id);
+        } else if (setSelectedFacilityId) {
+          setSelectedFacilityId(foundNode.id);
+        }
         glideCameraTo(
           [foundNode.pos[0] + 18, foundNode.pos[1] + 15, foundNode.pos[2] + 22],
           foundNode.pos
         );
         if (onSelectNode) onSelectNode(nodeId);
       }
+      return;
     }
   };
 
@@ -1043,6 +1336,40 @@ export default function PersistentStage3D({ onSelectNode }) {
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+
+                {/* 3D Twin Visual Overlays Toggles */}
+                <div className="pt-2 border-t border-slate-800/80">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
+                    <span>Twin Visual Overlays</span>
+                    <Layers className="w-3 h-3 text-cyan-400" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={() => setDemandHeatmapOverlay?.((prev) => ({ ...prev, active: !prev?.active }))}
+                      className={`px-2 py-1.5 rounded text-[11px] font-semibold flex items-center gap-1.5 transition ${
+                        demandHeatmapOverlay?.active
+                          ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
+                      }`}
+                      title="Toggle 3D Volumetric Demand Heatmap Pillars over Facilities"
+                    >
+                      <Activity className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span className="truncate">Demand Heatmap</span>
+                    </button>
+                    <button
+                      onClick={() => setOptimalRouteOverlay?.((prev) => ({ ...prev, active: !prev?.active }))}
+                      className={`px-2 py-1.5 rounded text-[11px] font-semibold flex items-center gap-1.5 transition ${
+                        optimalRouteOverlay?.active
+                          ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 shadow-sm'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
+                      }`}
+                      title="Toggle 3D Optimal Path Vector Spline Overlay"
+                    >
+                      <Navigation className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span className="truncate">Optimal Path</span>
+                    </button>
                   </div>
                 </div>
               </div>

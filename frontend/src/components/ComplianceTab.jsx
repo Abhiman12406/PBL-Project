@@ -24,13 +24,24 @@ import {
   Tag,
   HelpCircle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Compass
 } from 'lucide-react';
 import { api } from '../services/api';
 import { usePersona } from '../context/PersonaContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 export default function ComplianceTab() {
   const { currentRole, profile, canPerform } = usePersona();
+  const workspace = useWorkspace();
+  const trigger3DFlyTo = workspace?.trigger3DFlyTo;
+  const selectFacility = workspace?.selectFacility;
+
+  const handleFlyToCustomsFacility = () => {
+    const facId = 'PORT-JNPT-01';
+    if (selectFacility) selectFacility(facId);
+    if (trigger3DFlyTo) trigger3DFlyTo({ type: 'facility', id: facId });
+  };
 
   // State
   const [samples, setSamples] = useState([]);
@@ -204,49 +215,61 @@ export default function ComplianceTab() {
   return (
     <div className="space-y-6">
       {/* Top Technology & Pipeline HUD Banner */}
-      <div className="bright-card p-5 rounded-2xl bg-white border-2 border-slate-200">
+      <div className="cyber-glass p-5 rounded-2xl bg-slate-900/60 border border-slate-700/60 backdrop-blur-md shadow-lg">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-amber-600 shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
               <FileCheck2 className="w-6 h-6 stroke-[2.2]" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1">
-                <span className="text-xs font-black uppercase tracking-wider text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-300 bg-amber-950/80 px-2.5 py-0.5 rounded-md border border-amber-500/40">
                   Customs & Trade Compliance IDP
                 </span>
-                <span className="text-xs text-slate-300">•</span>
-                <span className="text-xs font-bold text-slate-600">
+                <span className="text-xs text-slate-600">•</span>
+                <span className="text-xs font-bold text-slate-400">
                   Cross-Border Port & Inland Corridor Gatekeeper
                 </span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
                 Automated Trade IDP & Local Vector RAG Orchestrator
               </h2>
             </div>
           </div>
 
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleFlyToCustomsFacility}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5"
+              title="Fly 3D Camera to JNPT Customs Port"
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>Fly 3D Customs Port</span>
+            </button>
+          </div>
+
           {/* Engine Specs Badges */}
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <div className="px-3 py-1.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
               <div className="text-left">
                 <div className="text-[10px] font-bold text-slate-400 uppercase">Extraction Engine</div>
-                <div className="text-xs font-black text-slate-800">Google Gemini 3.8 Flash</div>
+                <div className="text-xs font-black text-slate-200">Google Gemini 3.8 Flash</div>
               </div>
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2">
-              <Cpu className="w-3.5 h-3.5 text-emerald-600" />
+            <div className="px-3 py-1.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center gap-2">
+              <Cpu className="w-3.5 h-3.5 text-emerald-400" />
               <div className="text-left">
                 <div className="text-[10px] font-bold text-slate-400 uppercase">Semantic Index</div>
-                <div className="text-xs font-black text-slate-800">Local PyTorch RAG &lt; 5ms</div>
+                <div className="text-xs font-black text-slate-200">Local PyTorch RAG &lt; 5ms</div>
               </div>
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2">
-              <Scale className="w-3.5 h-3.5 text-rose-600" />
+            <div className="px-3 py-1.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center gap-2">
+              <Scale className="w-3.5 h-3.5 text-rose-400" />
               <div className="text-left">
                 <div className="text-[10px] font-bold text-slate-400 uppercase">Discrepancy Cross-Check</div>
-                <div className="text-xs font-black text-slate-800">Customs Act Sec 28 &amp; BIS/CDSCO</div>
+                <div className="text-xs font-black text-slate-200">Customs Act Sec 28 &amp; BIS/CDSCO</div>
               </div>
             </div>
           </div>

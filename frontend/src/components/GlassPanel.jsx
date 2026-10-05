@@ -29,6 +29,7 @@ export default function GlassPanel({
     restoreWindow,
     toggleMaximize,
     updatePosition,
+    updateSize,
     bringToFront,
     isAllowed
   } = useWorkspace();
@@ -46,6 +47,10 @@ export default function GlassPanel({
   const panelRef = useRef(null);
   const dragStartRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Resize handling
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef(null);
 
   // Dragging handlers with viewport boundary clamping
   const handleMouseDown = useCallback((e) => {
@@ -89,16 +94,56 @@ export default function GlassPanel({
     };
   }, [isDragging, id, updatePosition]);
 
+  // Corner resize drag handlers
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    bringToFront(id);
+    if (isMaximized) return;
+
+    setIsResizing(true);
+    resizeStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      width: size.width,
+      height: size.height
+    };
+  }, [bringToFront, id, isMaximized, size]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e) => {
+      if (!resizeStartRef.current) return;
+      const dw = e.clientX - resizeStartRef.current.mouseX;
+      const dh = e.clientY - resizeStartRef.current.mouseY;
+      updateSize(id, resizeStartRef.current.width + dw, resizeStartRef.current.height + dh);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      resizeStartRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, id, updateSize]);
+
   if (!isPanelOpen) return null;
 
   const allowed = isAllowed(viewRequired);
 
-  // Minimized Floating Pill View
+  // Minimized Floating Pill View (supports drag repositioning across canvas)
   if (isMinimized) {
     return (
       <div
         ref={panelRef}
-        onMouseDown={() => bringToFront(id)}
+        onMouseDown={handleMouseDown}
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
@@ -142,9 +187,9 @@ export default function GlassPanel({
         height: `${size.height}px`,
         zIndex
       }}
-      className={`fixed cyber-glass rounded-2xl border border-slate-700/60 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden backdrop-blur-2xl transition-shadow ${
+      className={`fixed cyber-glass rounded-2xl border border-slate-700/50 backdrop-blur-md bg-slate-950/75 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden transition-shadow ${
         isDragging ? 'opacity-95 shadow-cyan-500/10' : ''
-      }`}
+      } ${isResizing ? 'select-none pointer-events-auto' : ''}`}
     >
       {/* Draggable Panel Header Bar */}
       <div
@@ -239,6 +284,19 @@ export default function GlassPanel({
           children
         )}
       </div>
+
+      {/* Interactive Bottom-Right Corner Resize Handle */}
+      {!isMaximized && (
+        <div
+          onMouseDown={handleResizeStart}
+          className="absolute bottom-1 right-1 w-4 h-4 cursor-se-resize flex items-end justify-end p-0.5 text-slate-500 hover:text-cyan-400 transition select-none z-30"
+          title="Drag to resize panel"
+        >
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="stroke-current">
+            <path d="M7 1L1 7M7 4L4 7" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </div>
+      )}
     </div>
   );
 }

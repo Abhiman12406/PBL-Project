@@ -15,16 +15,124 @@ import {
   Clock,
   Sparkles,
   RefreshCw,
-  Send
+  Send,
+  Compass,
+  Navigation,
+  PlaneTakeoff,
+  AlertOctagon,
+  Flame
 } from 'lucide-react';
 import { api } from '../services/api';
 import { telemetryWS } from '../services/websocket';
+import { useWorkspace } from '../context/WorkspaceContext';
+
+export const CORRIDOR_INCIDENTS = [
+  {
+    id: 'INC-KASARA-01',
+    roadblockId: 'RB-KASARA-01',
+    title: 'Kasara Ghat Mudslide & Barrier Obstruction',
+    corridor: 'NH-160 (Mumbai ↔ Nashik)',
+    severity: 'CRITICAL',
+    disruptionType: 'LANDSLIDE_HAZARD',
+    location: [14, 9.8, -24],
+    description: 'Active mudslide and debris blockage across north-bound mountain pass lanes at elevation +580m.',
+    affectedVehicles: ['TRK-MH-01'],
+    mitigationOptions: [
+      {
+        id: 'mit-01',
+        title: 'Execute Autonomous Detour (NH-61 via Malshej Ghat)',
+        description: 'Bypasses Kasara roadblock via Kalyan-Malshej route (+21.6 km, +34m duration, preserves 98.4% SLA).',
+        actionType: 'DETOUR',
+        targetRoute: 'NH-61',
+        icon: Navigation,
+        buttonText: 'Execute Detour'
+      },
+      {
+        id: 'mit-02',
+        title: 'Hold Fleet at Bhiwandi Mega DC Staging Bay',
+        description: 'Halts inbound trucks at Bhiwandi buffer staging docks until NDRF mountain clearance.',
+        actionType: 'HOLD_FLEET',
+        targetFacility: 'DC-BHW-01',
+        icon: ShieldAlert,
+        buttonText: 'Hold Fleet'
+      },
+      {
+        id: 'mit-03',
+        title: 'Dispatch Emergency Drone Reconnaissance',
+        description: 'Launches automated LiDAR drone survey over the Kasara Ghat rockfall zone for real-time clearance telemetry.',
+        actionType: 'DISPATCH_DRONE',
+        icon: PlaneTakeoff,
+        buttonText: 'Launch Drone'
+      }
+    ]
+  }
+];
 
 export default function AutonomousSentinelHUD({
   compact = false,
   className = '',
   onDirectiveDispatch = null
 }) {
+  const workspace = useWorkspace();
+  const activeIncident = workspace?.activeIncident;
+  const selectIncident = workspace?.selectIncident;
+  const trigger3DFlyTo = workspace?.trigger3DFlyTo;
+  const selectFacility = workspace?.selectFacility;
+
+  const [selectedIncidentId, setSelectedIncidentId] = useState(activeIncident?.id || 'INC-KASARA-01');
+  const [mitigationStatus, setMitigationStatus] = useState(null);
+
+  // Sync when 3D scene clicks a roadblock/hazard
+  useEffect(() => {
+    if (activeIncident?.id && activeIncident.id !== selectedIncidentId) {
+      setSelectedIncidentId(activeIncident.id);
+      setExpanded(true);
+    }
+  }, [activeIncident]);
+
+  const handleSelectIncident = (incident) => {
+    setSelectedIncidentId(incident.id);
+    if (selectIncident) {
+      selectIncident(incident);
+    }
+    if (trigger3DFlyTo) {
+      trigger3DFlyTo({
+        type: 'incident',
+        id: incident.id,
+        position: incident.location
+      });
+    }
+  };
+
+  const handleExecuteMitigation = (option, incident) => {
+    setMitigationStatus(`Executing: ${option.title}...`);
+    if (option.actionType === 'DETOUR') {
+      if (trigger3DFlyTo) {
+        trigger3DFlyTo({ type: 'route', id: 'NH-61' });
+      }
+      setTimeout(() => {
+        setMitigationStatus(`Detour Active: Fleet unit rerouted via NH-61 Malshej Ghat (+21.6 km).`);
+      }, 1000);
+    } else if (option.actionType === 'HOLD_FLEET') {
+      if (selectFacility) {
+        selectFacility(option.targetFacility);
+      }
+      if (trigger3DFlyTo) {
+        trigger3DFlyTo({ type: 'facility', id: option.targetFacility });
+      }
+      setTimeout(() => {
+        setMitigationStatus(`Fleet held at Bhiwandi Mega DC Staging Bay.`);
+      }, 1000);
+    } else if (option.actionType === 'DISPATCH_DRONE') {
+      if (trigger3DFlyTo) {
+        trigger3DFlyTo({ type: 'incident', id: incident.id, position: incident.location });
+      }
+      setTimeout(() => {
+        setMitigationStatus(`Drone aerial LiDAR survey live streaming to TMS.`);
+      }, 1000);
+    }
+  };
+
   const [sentinel, setSentinel] = useState({
     mode: 'AUTONOMOUS_SENTINEL',
     risk_index: 24.5,
@@ -280,6 +388,115 @@ export default function AutonomousSentinelHUD({
                 }`}
               />
             </button>
+          </div>
+
+          {/* Corridor Incident Alerts & 3D Disruption Mitigations Card */}
+          <div className="space-y-2.5 p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+            <div className="flex items-center justify-between text-[11px] font-black uppercase text-slate-300">
+              <span className="flex items-center gap-1.5 text-rose-400">
+                <AlertOctagon className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+                <span>Corridor Disruption Alerts</span>
+              </span>
+              <span className="text-[10px] font-mono text-rose-400 bg-rose-950/80 px-1.5 py-0.5 rounded border border-rose-500/40">
+                1 Active Hazard
+              </span>
+            </div>
+
+            {CORRIDOR_INCIDENTS.map((incident) => {
+              const isSelected = selectedIncidentId === incident.id;
+              return (
+                <div
+                  key={incident.id}
+                  onClick={() => handleSelectIncident(incident)}
+                  className={`p-3 rounded-xl border text-xs space-y-2 transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-rose-950/40 border-rose-500/80 text-rose-100 shadow-[0_0_12px_rgba(244,63,94,0.25)] ring-1 ring-rose-500/50'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-rose-500/40'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase bg-rose-900/80 text-rose-200 border border-rose-500/50">
+                          {incident.severity}
+                        </span>
+                        <span className="font-bold text-white text-[12px]">{incident.title}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        {incident.corridor} • {incident.id}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectIncident(incident);
+                      }}
+                      className="px-2 py-1 rounded bg-rose-900/80 hover:bg-rose-800 text-white text-[10px] font-bold border border-rose-500/50 flex items-center gap-1 cursor-pointer"
+                      title="Focus 3D Disruption Zone"
+                    >
+                      <Compass className="w-2.5 h-2.5" />
+                      <span>Focus 3D</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    {incident.description}
+                  </p>
+
+                  {/* Mitigation Options Drawer */}
+                  {isSelected && (
+                    <div className="pt-2 border-t border-rose-900/60 space-y-2">
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-rose-300">
+                        <span>Autonomous Mitigation Options</span>
+                        <span className="text-slate-400 font-normal">Select response</span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {incident.mitigationOptions.map((opt) => {
+                          const Icon = opt.icon || Navigation;
+                          return (
+                            <div
+                              key={opt.id}
+                              className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 hover:border-sky-500/40 transition flex items-center justify-between gap-2"
+                            >
+                              <div className="space-y-0.5">
+                                <div className="font-bold text-white text-[11px] flex items-center gap-1">
+                                  <Icon className="w-3 h-3 text-sky-400" />
+                                  <span>{opt.title}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-400 leading-tight">
+                                  {opt.description}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleExecuteMitigation(opt, incident);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-[10px] font-black shrink-0 transition shadow-sm cursor-pointer"
+                              >
+                                {opt.buttonText}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {mitigationStatus && (
+                        <div className="p-2 rounded-lg bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 text-[10px] font-bold flex items-center gap-1.5 animate-fadeIn">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                          <span>{mitigationStatus}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Active Directives Stream Card */}

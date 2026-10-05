@@ -517,12 +517,14 @@ export function createFacilityNodeModel(node) {
  *   - Floating cold-chain status beacon
  */
 export function createProceduralTruck({
+  vehicleId = 'TRK-MH-01',
   cabColor = 0xff5400, // Safety Orange
   trailerColor = 0xf8fafc,
   beaconColor = 0x10b981
 } = {}) {
   const truckGroup = new THREE.Group();
   truckGroup.name = 'CommercialVehicle_Truck';
+  truckGroup.userData = { isVehicle: true, vehicleId };
 
   // 1. Trailer Box (Insulated Composite)
   const trailerGeo = new THREE.BoxGeometry(2.3, 2.7, 6.2);
@@ -696,6 +698,13 @@ export function createProceduralTruck({
   truckGroup.beaconCore = beaconCore;
   truckGroup.beaconRing = beaconRing;
 
+  // Tag all sub-meshes for raycaster hit detection
+  truckGroup.traverse((child) => {
+    if (child.isMesh) {
+      child.userData = { isVehicle: true, vehicleId };
+    }
+  });
+
   return truckGroup;
 }
 
@@ -717,7 +726,7 @@ export function createRoadblockBarricade({
   group.name = 'RoadblockBarricade_Kasara';
   group.position.set(pos[0], pos[1], pos[2]);
   group.rotation.y = rotationY;
-  group.userData = { isRoadblock: true, roadblockId: 'RB-KASARA-01' };
+  group.userData = { isRoadblock: true, roadblockId: 'RB-KASARA-01', incidentId: 'INC-KASARA-01' };
 
   // Concrete Jersey Barriers Base
   const barrierGeo = new THREE.BoxGeometry(4.2, 0.9, 0.7);
@@ -855,6 +864,13 @@ export function createRoadblockBarricade({
     beaconLeft.scale.setScalar(flash ? 1.35 : 0.85);
     beaconRight.scale.setScalar(flash ? 0.85 : 1.35);
   };
+
+  // Tag all roadblock child meshes for raycasting hit detection
+  group.traverse((child) => {
+    if (child.isMesh) {
+      child.userData = { isRoadblock: true, roadblockId: 'RB-KASARA-01', incidentId: 'INC-KASARA-01' };
+    }
+  });
 
   return group;
 }

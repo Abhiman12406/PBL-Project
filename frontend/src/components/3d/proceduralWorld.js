@@ -136,6 +136,12 @@ export function createExtrudedHighwayRibbon(curve, {
   rightShoulder.position.set(shoulderOffset * 0.4, roadWidth * 0.9, shoulderOffset * 0.4);
   roadGroup.add(rightShoulder);
 
+  // Attach reference properties for route glowing
+  roadGroup.centerLaneMesh = centerLaneMesh;
+  roadGroup.centerLaneMat = centerLaneMat;
+  roadGroup.leftShoulder = leftShoulder;
+  roadGroup.rightShoulder = rightShoulder;
+
   return roadGroup;
 }
 
@@ -228,6 +234,7 @@ export function createCorridorLogisticsNodes(onSelectNode) {
   const group = new THREE.Group();
   group.name = 'CorridorLogisticsFacilities';
   const rings = [];
+  const facilitiesMap = {};
 
   STAGE_FACILITIES.forEach((node) => {
     // 1. Procedural 3D Architectural Model
@@ -260,8 +267,9 @@ export function createCorridorLogisticsNodes(onSelectNode) {
     ringMesh.position.set(node.pos[0], node.pos[1] + 0.08, node.pos[2]);
     group.add(ringMesh);
 
-    rings.push({ mesh: ringMesh, scale: 1 });
+    rings.push({ mesh: ringMesh, scale: 1, nodeId: node.id });
+    facilitiesMap[node.id] = { model, beam, ringMesh, node };
   });
 
-  return { group, rings };
+  return { group, rings, facilitiesMap };
 }

@@ -13,7 +13,8 @@ import {
   Info,
   Sliders,
   Package,
-  Clock
+  Clock,
+  Compass
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -28,6 +29,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { api } from '../services/api';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 ChartJS.register(
   CategoryScale,
@@ -40,7 +42,29 @@ ChartJS.register(
   Filler
 );
 
+export const FACILITY_TO_SKU = {
+  'DEP-NSK-01': 'SKU-NAS-AGRI-01',
+  'PORT-JNPT-01': 'SKU-JNPT-ELEC-01',
+  'FC-PUN-01': 'SKU-PUN-AUTO-01',
+  'DC-BHW-01': 'SKU-MUM-PHARM-01',
+  'HUB-THN-01': 'SKU-THN-CHEM-01'
+};
+
+export const SKU_TO_FACILITY = {
+  'SKU-NAS-AGRI-01': 'DEP-NSK-01',
+  'SKU-JNPT-ELEC-01': 'PORT-JNPT-01',
+  'SKU-PUN-AUTO-01': 'FC-PUN-01',
+  'SKU-MUM-PHARM-01': 'DC-BHW-01',
+  'SKU-THN-CHEM-01': 'HUB-THN-01'
+};
+
 export default function ForecastingTab({ personaProfile }) {
+  const workspace = useWorkspace();
+  const selectedFacilityId = workspace?.selectedFacilityId;
+  const selectFacility = workspace?.selectFacility;
+  const trigger3DFlyTo = workspace?.trigger3DFlyTo;
+  const triggerMlPrediction = workspace?.triggerMlPrediction;
+
   const [skus, setSkus] = useState([]);
   const [selectedSkuId, setSelectedSkuId] = useState('SKU-NAS-AGRI-01');
   const [horizonDays, setHorizonDays] = useState(14);
@@ -50,6 +74,16 @@ export default function ForecastingTab({ personaProfile }) {
   const [forecastData, setForecastData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Synchronize 3D warehouse selection to active SKU
+  useEffect(() => {
+    if (selectedFacilityId && FACILITY_TO_SKU[selectedFacilityId]) {
+      const mappedSku = FACILITY_TO_SKU[selectedFacilityId];
+      if (mappedSku && mappedSku !== selectedSkuId) {
+        setSelectedSkuId(mappedSku);
+      }
+    }
+  }, [selectedFacilityId]);
 
   // Load SKU catalog on mount
   useEffect(() => {
@@ -87,6 +121,10 @@ export default function ForecastingTab({ personaProfile }) {
       };
       const res = await api.predictDemand(payload);
       setForecastData(res);
+      // Trigger 3D Demand Heatmap overlay update
+      if (triggerMlPrediction) {
+        triggerMlPrediction(selectedSkuId, res);
+      }
     } catch (err) {
       console.error('Forecasting request failed:', err);
       setError(err.message || 'Failed to generate forecast.');
@@ -98,6 +136,20 @@ export default function ForecastingTab({ personaProfile }) {
   useEffect(() => {
     fetchForecast();
   }, [selectedSkuId, horizonDays, includeExogenous, promoDiscount, weatherSeverity]);
+
+  const handleSelectSku = (skuId) => {
+    setSelectedSkuId(skuId);
+    const facId = SKU_TO_FACILITY[skuId];
+    if (facId && selectFacility) {
+      selectFacility(facId);
+    }
+  };
+
+  const handleFlyTo3D = (skuId) => {
+    const facId = SKU_TO_FACILITY[skuId || selectedSkuId] || 'DEP-NSK-01';
+    if (selectFacility) selectFacility(facId);
+    if (trigger3DFlyTo) trigger3DFlyTo({ type: 'facility', id: facId });
+  };
 
   const selectedSku = useMemo(() => {
     return skus.find(s => s.sku_id === selectedSkuId) || {
@@ -239,7 +291,7 @@ export default function ForecastingTab({ personaProfile }) {
                 size: 11,
                 weight: '600'
               },
-              color: '#334155'
+              color: '#CBD5E1'
             }
           },
           tooltip: {
@@ -260,29 +312,29 @@ export default function ForecastingTab({ personaProfile }) {
         scales: {
           x: {
             grid: {
-              color: '#F1F5F9',
+              color: 'rgba(51, 65, 85, 0.4)',
               drawBorder: false
             },
             ticks: {
               font: { size: 11, weight: '500' },
-              color: '#64748B',
+              color: '#94A3B8',
               maxRotation: 0
             }
           },
           y: {
             grid: {
-              color: '#F1F5F9',
+              color: 'rgba(51, 65, 85, 0.4)',
               drawBorder: false
             },
             ticks: {
               font: { size: 11, weight: '500' },
-              color: '#64748B'
+              color: '#94A3B8'
             },
             title: {
               display: true,
               text: 'Daily Quantity (Units)',
               font: { size: 11, weight: '600' },
-              color: '#475569'
+              color: '#CBD5E1'
             }
           }
         }
@@ -316,26 +368,35 @@ export default function ForecastingTab({ personaProfile }) {
   return (
     <div className="space-y-6">
       {/* Top Banner / Breadcrumb */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-2xl border-2 border-slate-200 shadow-sm">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 cyber-glass bg-slate-900/60 p-5 rounded-2xl border border-slate-700/60 backdrop-blur-md shadow-lg">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase bg-orange-100 text-[#FF5400] border border-orange-200">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase bg-orange-950/80 text-[#FF5400] border border-orange-500/40">
               Neural Forecasting Studio
             </span>
-            <span className="text-xs font-semibold text-slate-500">
+            <span className="text-xs font-semibold text-slate-400">
               Western India Corridor • LSTM/GRU Engine v2.1
             </span>
           </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
             Multi-Horizon Demand Predictions & Safety Stock
           </h2>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => handleFlyTo3D()}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+            title="Fly 3D Camera to Depot Node"
+          >
+            <Compass className="w-3.5 h-3.5" />
+            <span>Fly 3D Camera</span>
+          </button>
+
           <button
             onClick={fetchForecast}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all border border-slate-200 active:scale-95 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 text-xs font-bold transition-all border border-slate-700 active:scale-95 disabled:opacity-50 cursor-pointer"
             title="Recalculate neural weights inference"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#FF5400]' : ''}`} />
@@ -345,7 +406,7 @@ export default function ForecastingTab({ personaProfile }) {
           <button
             onClick={handleExportJSON}
             disabled={!forecastData}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-sm active:scale-95 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950 hover:bg-slate-900 text-white text-xs font-bold transition-all border border-slate-700 shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export Payload</span>
@@ -354,14 +415,14 @@ export default function ForecastingTab({ personaProfile }) {
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border-2 border-rose-200 text-rose-800 text-xs font-bold flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-500/60 text-rose-200 text-xs font-bold flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
             <span>Error: {error}</span>
           </div>
           <button
             onClick={fetchForecast}
-            className="px-2.5 py-1 rounded-lg bg-rose-200 hover:bg-rose-300 text-rose-900 text-xs font-bold transition-colors"
+            className="px-2.5 py-1 rounded-lg bg-rose-900/60 hover:bg-rose-800 text-rose-100 text-xs font-bold transition-colors cursor-pointer"
           >
             Retry
           </button>
@@ -371,13 +432,13 @@ export default function ForecastingTab({ personaProfile }) {
       {/* Control Panel: SKU Selector + Horizon Buttons + Exogenous Sliders */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Col 1 & 2: SKU Catalog & Horizon Selection */}
-        <div className="xl:col-span-2 bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm space-y-5">
+        <div className="xl:col-span-2 cyber-glass bg-slate-900/60 p-6 rounded-2xl border border-slate-700/60 backdrop-blur-md shadow-lg space-y-5">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+            <label className="text-xs font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-2">
               <Package className="w-4 h-4 text-[#FF5400]" />
               <span>Select Inventory SKU Catalog</span>
             </label>
-            <span className="text-[11px] font-semibold text-slate-500">
+            <span className="text-[11px] font-semibold text-slate-400">
               Corridor Nodes: Nashik, JNPT, Pune, Mumbai, Thane
             </span>
           </div>
@@ -389,35 +450,35 @@ export default function ForecastingTab({ personaProfile }) {
               return (
                 <button
                   key={sku.sku_id}
-                  onClick={() => setSelectedSkuId(sku.sku_id)}
-                  className={`text-left p-3.5 rounded-xl border-2 transition-all flex flex-col justify-between ${
+                  onClick={() => handleSelectSku(sku.sku_id)}
+                  className={`text-left p-3.5 rounded-xl border transition-all flex flex-col justify-between cursor-pointer ${
                     isSelected
-                      ? 'border-[#FF5400] bg-orange-50/50 shadow-sm ring-2 ring-orange-500/20'
-                      : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                      ? 'border-[#FF5400] bg-orange-950/40 text-white shadow-md ring-1 ring-orange-500/50'
+                      : 'border-slate-800 bg-slate-950/40 hover:bg-slate-800/40 text-slate-300'
                   }`}
                 >
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                        isSelected ? 'bg-[#FF5400] text-white' : 'bg-slate-100 text-slate-600'
+                        isSelected ? 'bg-[#FF5400] text-white' : 'bg-slate-800 text-slate-300'
                       }`}>
                         {sku.category}
                       </span>
-                      <span className="text-[10px] font-mono font-bold text-slate-500">
+                      <span className="text-[10px] font-mono font-bold text-slate-400">
                         {sku.default_warehouse_id}
                       </span>
                     </div>
-                    <div className="text-xs font-extrabold text-slate-900 line-clamp-1">
+                    <div className="text-xs font-extrabold text-white line-clamp-1">
                       {sku.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-mono">
+                    <div className="text-[11px] text-slate-400 font-mono">
                       {sku.sku_id}
                     </div>
                   </div>
 
-                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-semibold text-slate-600">
+                  <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-semibold text-slate-300">
                     <span>₹{sku.unit_price_inr}</span>
-                    <span className="text-slate-500">Lead: {sku.lead_time_days}d</span>
+                    <span className="text-slate-400">Lead: {sku.lead_time_days}d</span>
                   </div>
                 </button>
               );
@@ -425,13 +486,13 @@ export default function ForecastingTab({ personaProfile }) {
           </div>
 
           {/* Horizon Selection Bar */}
-          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-100">
+          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-800/80">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-slate-600" />
-              <span className="text-xs font-bold text-slate-800">Forecast Horizon:</span>
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <span className="text-xs font-bold text-slate-200">Forecast Horizon:</span>
             </div>
 
-            <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200">
+            <div className="inline-flex p-1 rounded-xl bg-slate-950 border border-slate-800">
               {[
                 { days: 7, label: '7 Days', sub: 'Operational' },
                 { days: 14, label: '14 Days', sub: 'Procurement' },
@@ -440,10 +501,10 @@ export default function ForecastingTab({ personaProfile }) {
                 <button
                   key={days}
                   onClick={() => setHorizonDays(days)}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-extrabold transition-all flex items-center gap-1.5 ${
+                  className={`px-4 py-1.5 rounded-lg text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
                     horizonDays === days
-                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-slate-800 text-white shadow-sm border border-slate-700'
+                      : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   <span>{label}</span>
@@ -455,10 +516,10 @@ export default function ForecastingTab({ personaProfile }) {
         </div>
 
         {/* Col 3: Exogenous Neural Features & Scenario Tweaks */}
-        <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm space-y-5 flex flex-col justify-between">
+        <div className="cyber-glass bg-slate-900/60 p-6 rounded-2xl border border-slate-700/60 backdrop-blur-md shadow-lg space-y-5 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+              <label className="text-xs font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-[#FF5400]" />
                 <span>Exogenous What-If Controls</span>
               </label>
@@ -470,19 +531,19 @@ export default function ForecastingTab({ personaProfile }) {
                   onChange={(e) => setIncludeExogenous(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#FF5400]"></div>
+                <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#FF5400]"></div>
               </label>
             </div>
 
-            <p className="text-[11px] text-slate-500 leading-relaxed">
+            <p className="text-[11px] text-slate-400 leading-relaxed">
               Inject promotional price discounts and Western Ghats monsoon weather anomalies into LSTM input tensors to test resilience.
             </p>
 
             {/* Promo Discount Slider */}
             <div className={`space-y-2 p-3.5 rounded-xl border transition-all ${
-              includeExogenous ? 'bg-orange-50/30 border-orange-200' : 'bg-slate-50 border-slate-200 opacity-60'
+              includeExogenous ? 'bg-orange-950/20 border-orange-500/40' : 'bg-slate-950/40 border-slate-800 opacity-60'
             }`}>
-              <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-200">
                 <span className="flex items-center gap-1.5">
                   <Tag className="w-3.5 h-3.5 text-[#FF5400]" />
                   <span>Promotional Discount:</span>
@@ -497,9 +558,9 @@ export default function ForecastingTab({ personaProfile }) {
                 value={promoDiscount}
                 disabled={!includeExogenous}
                 onChange={(e) => setPromoDiscount(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#FF5400]"
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#FF5400]"
               />
-              <div className="flex justify-between text-[10px] text-slate-500 font-semibold">
+              <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
                 <span>0% (Standard)</span>
                 <span>15% (Seasonal)</span>
                 <span>30% (Flash Sale)</span>
@@ -508,14 +569,14 @@ export default function ForecastingTab({ personaProfile }) {
 
             {/* Weather Anomaly Buttons */}
             <div className={`space-y-2 p-3.5 rounded-xl border transition-all ${
-              includeExogenous ? 'bg-blue-50/30 border-blue-200' : 'bg-slate-50 border-slate-200 opacity-60'
+              includeExogenous ? 'bg-sky-950/20 border-sky-500/40' : 'bg-slate-950/40 border-slate-800 opacity-60'
             }`}>
-              <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-200">
                 <span className="flex items-center gap-1.5">
-                  <CloudRain className="w-3.5 h-3.5 text-blue-600" />
+                  <CloudRain className="w-3.5 h-3.5 text-sky-400" />
                   <span>Weather Anomaly Index:</span>
                 </span>
-                <span className="font-mono text-blue-700 text-sm">{weatherSeverity}x</span>
+                <span className="font-mono text-sky-400 text-sm">{weatherSeverity}x</span>
               </div>
 
               <div className="grid grid-cols-3 gap-1.5 pt-1">
@@ -528,10 +589,10 @@ export default function ForecastingTab({ personaProfile }) {
                     key={value}
                     disabled={!includeExogenous}
                     onClick={() => setWeatherSeverity(value)}
-                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all ${
+                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
                       weatherSeverity === value && includeExogenous
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'
+                        ? 'bg-sky-600 text-white border-sky-500 shadow-sm'
+                        : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-sky-500/40'
                     }`}
                   >
                     {label}
@@ -541,8 +602,8 @@ export default function ForecastingTab({ personaProfile }) {
             </div>
           </div>
 
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
-            <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+          <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
+            <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
             <span>
               Neural model dynamically balances demand price elasticity with supply chain lead-time variability.
             </span>
@@ -553,98 +614,98 @@ export default function ForecastingTab({ personaProfile }) {
       {/* KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Average Daily Demand */}
-        <div className="bg-white p-5 rounded-2xl border-2 border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-slate-500">
+        <div className="cyber-glass bg-slate-900/60 p-5 rounded-2xl border border-slate-700/60 backdrop-blur-md shadow-sm space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-bold uppercase tracking-wider">Avg Daily Demand</span>
-            <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center text-[#FF5400]">
+            <div className="w-8 h-8 rounded-lg bg-orange-950/60 border border-orange-500/40 flex items-center justify-center text-[#FF5400]">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 tracking-tight">
-            {summary.average_daily_demand} <span className="text-sm font-semibold text-slate-500">units/day</span>
+          <div className="text-2xl font-black text-white tracking-tight">
+            {summary.average_daily_demand} <span className="text-sm font-semibold text-slate-400">units/day</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
             <ArrowUpRight className="w-3.5 h-3.5" />
             <span>Total: {summary.total_horizon_demand.toLocaleString()} units ({horizonDays}d)</span>
           </div>
         </div>
 
         {/* KPI 2: Volatility Index */}
-        <div className="bg-white p-5 rounded-2xl border-2 border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-slate-500">
+        <div className="cyber-glass bg-slate-900/60 p-5 rounded-2xl border border-slate-700/60 backdrop-blur-md shadow-sm space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-bold uppercase tracking-wider">Volatility Index (CV)</span>
-            <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
+            <div className="w-8 h-8 rounded-lg bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
               <BarChart3 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 tracking-tight">
+          <div className="text-2xl font-black text-white tracking-tight">
             {(summary.volatility_index * 100).toFixed(1)}%
           </div>
-          <div className="text-[11px] font-semibold text-slate-500">
+          <div className="text-[11px] font-semibold text-slate-400">
             {summary.volatility_index < 0.15 ? '🟢 Stable daily pattern' : '🟡 Moderate volatility'}
           </div>
         </div>
 
         {/* KPI 3: Recommended Safety Stock */}
-        <div className="bg-white p-5 rounded-2xl border-2 border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-slate-500">
+        <div className="cyber-glass bg-slate-900/60 p-5 rounded-2xl border border-slate-700/60 backdrop-blur-md shadow-sm space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-bold uppercase tracking-wider">Suggested Safety Stock</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-[#00C853]">
+            <div className="w-8 h-8 rounded-lg bg-emerald-950/60 border border-emerald-500/40 flex items-center justify-center text-[#00C853]">
               <ShieldCheck className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-[#00C853] tracking-tight">
-            {summary.recommended_safety_stock} <span className="text-sm font-semibold text-slate-500">units</span>
+          <div className="text-2xl font-black text-[#00E676] tracking-tight">
+            {summary.recommended_safety_stock} <span className="text-sm font-semibold text-slate-400">units</span>
           </div>
-          <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+          <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
             <span>Target SLA:</span>
-            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px]">
+            <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[10px]">
               {(selectedSku.service_level_target * 100).toFixed(0)}% (Z=1.65)
             </span>
           </div>
         </div>
 
         {/* KPI 4: Stockout Risk */}
-        <div className="bg-white p-5 rounded-2xl border-2 border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-slate-500">
+        <div className="cyber-glass bg-slate-900/60 p-5 rounded-2xl border border-slate-700/60 backdrop-blur-md shadow-sm space-y-2">
+          <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-bold uppercase tracking-wider">Stockout Risk Score</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+            <div className="w-8 h-8 rounded-lg bg-blue-950/60 border border-blue-500/40 flex items-center justify-center text-blue-400">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 tracking-tight">
+          <div className="text-2xl font-black text-white tracking-tight">
             {(summary.stockout_risk_score * 100).toFixed(1)}%
           </div>
-          <div className="text-[11px] font-semibold text-slate-500">
+          <div className="text-[11px] font-semibold text-slate-400">
             Current stock: {selectedSku.current_stock?.toLocaleString() || '2,500'} units
           </div>
         </div>
       </div>
 
       {/* Main Multi-Line Chart with Shaded 95% Confidence Intervals */}
-      <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+      <div className="cyber-glass bg-slate-900/60 p-6 rounded-2xl border border-slate-700/60 backdrop-blur-md shadow-lg space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
           <div>
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <h3 className="text-base font-extrabold text-white flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-[#FF5400]" />
               <span>Neural Demand Trajectory & 95% Confidence Interval Band</span>
             </h3>
-            <p className="text-xs font-medium text-slate-500">
+            <p className="text-xs font-medium text-slate-400">
               Historical actuals (past 14 days) concatenated with PyTorch multi-step point predictions ($lower \le point \le upper$).
             </p>
           </div>
 
-          <div className="flex items-center gap-3 text-xs font-bold text-slate-600">
+          <div className="flex items-center gap-3 text-xs font-bold text-slate-300">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-[#FF5400]"></span>
               <span>Point Forecast</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-sm bg-orange-200 border border-orange-400"></span>
+              <span className="w-3 h-3 rounded-sm bg-orange-500/30 border border-orange-400"></span>
               <span>95% CI Range</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 border-t-2 border-dashed border-emerald-600"></span>
+              <span className="w-3 h-0.5 border-t-2 border-dashed border-emerald-500"></span>
               <span>Safety Stock</span>
             </div>
           </div>
@@ -653,14 +714,14 @@ export default function ForecastingTab({ personaProfile }) {
         {/* Chart Canvas */}
         <div className="h-[340px] w-full">
           {loading && !forecastData ? (
-            <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-500">
+            <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-400">
               <RefreshCw className="w-8 h-8 animate-spin text-[#FF5400]" />
               <span className="text-xs font-bold">Executing PyTorch LSTM Sequence Inference...</span>
             </div>
           ) : chartConfig ? (
             <Line data={chartConfig.data} options={chartConfig.options} />
           ) : (
-            <div className="h-full flex items-center justify-center text-xs font-semibold text-slate-500">
+            <div className="h-full flex items-center justify-center text-xs font-semibold text-slate-400">
               No forecast data available.
             </div>
           )}
@@ -668,15 +729,15 @@ export default function ForecastingTab({ personaProfile }) {
       </div>
 
       {/* Detailed Forecast Schedule Table */}
-      <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+      <div className="cyber-glass bg-slate-900/60 rounded-2xl border border-slate-700/60 backdrop-blur-md shadow-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-slate-600" />
-            <h4 className="text-sm font-extrabold text-slate-900">
+            <Clock className="w-4 h-4 text-slate-400" />
+            <h4 className="text-sm font-extrabold text-white">
               Daily Prediction Schedule & Statistical Variance Bounds
             </h4>
           </div>
-          <span className="text-xs font-mono font-bold text-slate-500">
+          <span className="text-xs font-mono font-bold text-slate-400">
             {predictionsList.length} Horizon Steps
           </span>
         </div>
@@ -684,7 +745,7 @@ export default function ForecastingTab({ personaProfile }) {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+              <tr className="bg-slate-950/80 text-slate-300 font-extrabold border-b border-slate-800 uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-4">Date</th>
                 <th className="py-3 px-4">Day</th>
                 <th className="py-3 px-4 text-right">Point Prediction</th>
@@ -693,33 +754,33 @@ export default function ForecastingTab({ personaProfile }) {
                 <th className="py-3 px-4 text-right">Suggested Safety Stock</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-800/60 text-slate-200">
               {predictionsList.map((pred) => {
                 const isWeekend = pred.day_name === 'Saturday' || pred.day_name === 'Sunday';
                 return (
                   <tr
                     key={pred.date}
-                    className={`hover:bg-slate-50/80 transition-colors ${
-                      isWeekend ? 'bg-slate-50/40' : ''
+                    className={`hover:bg-slate-800/40 transition-colors ${
+                      isWeekend ? 'bg-slate-950/30' : ''
                     }`}
                   >
-                    <td className="py-3 px-4 font-mono font-bold text-slate-800">
+                    <td className="py-3 px-4 font-mono font-bold text-slate-200">
                       {pred.date}
                     </td>
-                    <td className="py-3 px-4 font-semibold text-slate-600">
+                    <td className="py-3 px-4 font-semibold text-slate-300">
                       {pred.day_name}
                       {isWeekend && (
-                        <span className="ml-1.5 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold border border-slate-700">
                           Weekend
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right font-black text-slate-900 text-sm">
+                    <td className="py-3 px-4 text-right font-black text-white text-sm">
                       {pred.predicted_demand_units}{' '}
-                      <span className="text-[11px] font-normal text-slate-500">units</span>
+                      <span className="text-[11px] font-normal text-slate-400">units</span>
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <span className="inline-flex items-center gap-1 font-mono font-bold px-2.5 py-1 rounded-lg bg-orange-50 text-orange-950 border border-orange-200 text-xs">
+                      <span className="inline-flex items-center gap-1 font-mono font-bold px-2.5 py-1 rounded-lg bg-orange-950/40 text-orange-200 border border-orange-500/40 text-xs">
                         <span>{pred.confidence_interval_95.lower}</span>
                         <span className="text-orange-400">↔</span>
                         <span>{pred.confidence_interval_95.upper}</span>
@@ -727,22 +788,22 @@ export default function ForecastingTab({ personaProfile }) {
                     </td>
                     <td className="py-3 px-4 text-right font-medium">
                       {pred.exogenous_impact.promo_uplift_units > 0 ? (
-                        <span className="text-emerald-700 font-bold">
+                        <span className="text-emerald-400 font-bold">
                           +{pred.exogenous_impact.promo_uplift_units} (promo)
                         </span>
                       ) : (
                         <span className="text-slate-500">0</span>
                       )}
                       {pred.exogenous_impact.weather_delta_units !== 0 && (
-                        <span className="ml-1 text-blue-700 font-bold">
+                        <span className="ml-1 text-sky-400 font-bold">
                           {pred.exogenous_impact.weather_delta_units > 0 ? '+' : ''}
                           {pred.exogenous_impact.weather_delta_units} (weather)
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right font-bold text-emerald-800">
+                    <td className="py-3 px-4 text-right font-bold text-emerald-400">
                       {pred.recommended_safety_stock}{' '}
-                      <span className="text-[10px] text-slate-500 font-normal">units</span>
+                      <span className="text-[10px] text-slate-400 font-normal">units</span>
                     </td>
                   </tr>
                 );

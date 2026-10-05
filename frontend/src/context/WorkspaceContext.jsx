@@ -103,6 +103,31 @@ export function WorkspaceProvider({ children }) {
     simulated_time: '08:00:00 AM'
   });
 
+  // Bi-directional 3D Scene Binding States
+  const [flyToTarget, setFlyToTarget] = useState(null); // { type, id, timestamp, options }
+  const [highlightedRoute, setHighlightedRoute] = useState(null); // 'main_corridor' | 'southern_corridor' | 'detour_corridor' | 'optimal_vector'
+  const [activeFacilityGlow, setActiveFacilityGlow] = useState('DC-BHW-01');
+  const [activeIncident, setActiveIncident] = useState(null); // { id, name, location, severity, options }
+  const [demandHeatmapOverlay, setDemandHeatmapOverlay] = useState({
+    active: false,
+    facilityDemands: {
+      'PORT-JNPT-01': 4800,
+      'DC-BHW-01': 4200,
+      'HUB-THN-01': 2100,
+      'PASS-KASARA-01': 800,
+      'DEP-NSK-01': 3800,
+      'FC-PUN-01': 3500
+    },
+    timestamp: Date.now()
+  });
+  const [optimalRouteOverlay, setOptimalRouteOverlay] = useState({
+    active: false,
+    pathCoordinates: [],
+    routeName: 'Optimal Multi-Stop Corridor Vector',
+    metrics: { distanceKm: 142.8, durationMin: 135, savingsPct: 18.4 },
+    timestamp: Date.now()
+  });
+
   const toggleStageEngine = useCallback(() => {
     setActiveStageEngine((prev) => (prev === 'tactical_3d' ? 'cesium_gis' : 'tactical_3d'));
   }, []);
@@ -395,6 +420,101 @@ export function WorkspaceProvider({ children }) {
     return isServiceAllowed(currentRole, profile?.permissions, viewRequired);
   }, [currentRole, profile]);
 
+  // Bi-directional 3D Scene Binding Action Dispatchers
+  const trigger3DFlyTo = useCallback((typeOrObj, maybeId, extra = {}) => {
+    let type, id, options;
+    if (typeof typeOrObj === 'object' && typeOrObj !== null) {
+      type = typeOrObj.type;
+      id = typeOrObj.id;
+      options = { ...typeOrObj, ...(typeof maybeId === 'object' ? maybeId : extra) };
+    } else {
+      type = typeOrObj;
+      id = maybeId;
+      options = extra;
+    }
+
+    setFlyToTarget({
+      type,
+      id,
+      extra: options,
+      timestamp: Date.now()
+    });
+
+    if (type === 'facility') {
+      setSelectedFacilityId(id);
+      setActiveFacilityGlow(id);
+    } else if (type === 'vehicle') {
+      setActiveVehicleId(id);
+    } else if (type === 'route') {
+      setHighlightedRoute(id);
+    } else if (type === 'incident') {
+      setActiveIncident(options.incident || { id, name: 'Disruption Zone Alert' });
+    }
+  }, []);
+
+  const selectFacility = useCallback((facilityId, extra = {}) => {
+    setSelectedFacilityId(facilityId);
+    setActiveFacilityGlow(facilityId);
+    trigger3DFlyTo('facility', facilityId, extra);
+  }, [trigger3DFlyTo]);
+
+  const selectVehicle = useCallback((vehicleId, extra = {}) => {
+    setActiveVehicleId(vehicleId);
+    trigger3DFlyTo('vehicle', vehicleId, extra);
+  }, [trigger3DFlyTo]);
+
+  const selectIncident = useCallback((incident, extra = {}) => {
+    const incObj = typeof incident === 'string'
+      ? { id: incident, name: 'Kasara Mountain Pass Disruption', location: 'Kasara Ghat NH-160' }
+      : incident;
+    setActiveIncident(incObj);
+    trigger3DFlyTo('incident', incObj.id, { incident: incObj, ...extra });
+    // Also ensure Autonomous Sentinel panel is open and focused for immediate mitigation view
+    openWindow('sentinel');
+    bringToFront('sentinel');
+  }, [bringToFront, openWindow, trigger3DFlyTo]);
+
+  const triggerMlPrediction = useCallback((skuId, forecastResult) => {
+    // Generate facility-specific demand distribution from ML prediction result
+    const baseDemand = forecastResult?.summary?.mean_daily_demand || 420;
+    const demands = {
+      'PORT-JNPT-01': Math.round(baseDemand * 11.2),
+      'DC-BHW-01': Math.round(baseDemand * 9.8),
+      'HUB-THN-01': Math.round(baseDemand * 5.4),
+      'PASS-KASARA-01': Math.round(baseDemand * 2.1),
+      'DEP-NSK-01': Math.round(baseDemand * 8.6),
+      'FC-PUN-01': Math.round(baseDemand * 7.9)
+    };
+    setDemandHeatmapOverlay({
+      active: true,
+      skuId,
+      facilityDemands: demands,
+      timestamp: Date.now()
+    });
+  }, []);
+
+  const triggerRouteOptimization = useCallback((routeResult) => {
+    const defaultCoords = [
+      [-44, 0.8, 32],   // JNPT Port
+      [-14, 0.8, 2],    // Bhiwandi Central DC
+      [-24, 0.8, 16],   // Thane Hub
+      [14, 9.8, -24],   // Kasara Ghat
+      [42, 6.8, -48]    // Nashik Agro Depot
+    ];
+    setOptimalRouteOverlay({
+      active: true,
+      pathCoordinates: routeResult?.optimal_coordinates || defaultCoords,
+      routeName: routeResult?.route_name || 'Computed Optimal Multi-Stop Vector',
+      metrics: {
+        distanceKm: routeResult?.total_distance_km || 142.8,
+        durationMin: routeResult?.total_duration_mins || 135,
+        savingsPct: routeResult?.fuel_saved_pct || 18.4
+      },
+      timestamp: Date.now()
+    });
+    setHighlightedRoute('optimal_vector');
+  }, []);
+
   const value = useMemo(() => ({
     windows,
     highestZIndex,
@@ -411,6 +531,24 @@ export function WorkspaceProvider({ children }) {
     setActiveRoadblocks,
     simState,
     setSimState,
+    flyToTarget,
+    setFlyToTarget,
+    trigger3DFlyTo,
+    highlightedRoute,
+    setHighlightedRoute,
+    activeFacilityGlow,
+    setActiveFacilityGlow,
+    activeIncident,
+    setActiveIncident,
+    demandHeatmapOverlay,
+    setDemandHeatmapOverlay,
+    optimalRouteOverlay,
+    setOptimalRouteOverlay,
+    selectFacility,
+    selectVehicle,
+    selectIncident,
+    triggerMlPrediction,
+    triggerRouteOptimization,
     openWindow,
     closeWindow,
     minimizeWindow,
@@ -435,6 +573,18 @@ export function WorkspaceProvider({ children }) {
     activeVehicleId,
     activeRoadblocks,
     simState,
+    flyToTarget,
+    trigger3DFlyTo,
+    highlightedRoute,
+    activeFacilityGlow,
+    activeIncident,
+    demandHeatmapOverlay,
+    optimalRouteOverlay,
+    selectFacility,
+    selectVehicle,
+    selectIncident,
+    triggerMlPrediction,
+    triggerRouteOptimization,
     openWindow,
     closeWindow,
     minimizeWindow,
@@ -458,9 +608,5 @@ export function WorkspaceProvider({ children }) {
 }
 
 export function useWorkspace() {
-  const context = useContext(WorkspaceContext);
-  if (!context) {
-    throw new Error('useWorkspace must be used within a WorkspaceProvider');
-  }
-  return context;
+  return useContext(WorkspaceContext);
 }
