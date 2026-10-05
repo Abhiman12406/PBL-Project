@@ -66,7 +66,8 @@ import {
   disposeThreeScene,
   setupContextLossHandlers,
   shouldThrottleRender,
-  isWebGLAvailable
+  isWebGLAvailable,
+  ensureSafeShaderPrecisionFormat
 } from '../utils/webglHardening.js';
 import { useGlobalKeyboardShortcuts } from '../utils/keyboardShortcuts.js';
 
@@ -258,8 +259,11 @@ export default function PersistentStage3D({ onSelectNode }) {
   useEffect(() => {
     if (!containerRef.current || !canvasRef.current) return;
 
-    // 0. Verify WebGL Context Availability in current browser runtime
-    if (!isWebGLAvailable(canvasRef.current)) {
+    // 0. Ensure WebGL shader precision format safety is applied
+    ensureSafeShaderPrecisionFormat();
+
+    // Verify WebGL context availability in current browser runtime (using clean test)
+    if (!isWebGLAvailable()) {
       console.warn('[PersistentStage3D] WebGL hardware acceleration unavailable. Engaging 2D tactical schematic mode.');
       setWebglError('Hardware WebGL acceleration unavailable');
       return;
@@ -287,16 +291,18 @@ export default function PersistentStage3D({ onSelectNode }) {
     try {
       renderer = new THREE.WebGLRenderer({
         canvas: canvasRef.current,
-        antialias: true,
-        powerPreference: 'high-performance',
+        antialias: false,
+        powerPreference: 'default',
+        precision: 'mediump',
         stencil: false,
         depth: true
       });
       renderer.setSize(width, height);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.shadowMap.type = THREE.PCFShadowMap;
       rendererRef.current = renderer;
+      setWebglError(null);
     } catch (err) {
       console.warn('[PersistentStage3D] WebGLRenderer creation failed:', err);
       setWebglError(err?.message || 'WebGL context initialization failed');
@@ -595,9 +601,12 @@ export default function PersistentStage3D({ onSelectNode }) {
       // Animate highway traffic flow pulses
       pulsesRef.current.forEach((pulse) => {
         pulse.offset = (pulse.offset + delta * pulse.speed) % 1.0;
-        const pt = mainCorridorCurve.getPointAt(pulse.offset);
-        pulse.mesh.position.copy(pt);
-        pulse.mesh.position.y += 1.2;
+        const clampedOffset = Math.min(0.9999, Math.max(0, pulse.offset));
+        const pt = mainCorridorCurve.getPointAt(clampedOffset);
+        if (pt) {
+          pulse.mesh.position.copy(pt);
+          pulse.mesh.position.y += 1.2;
+        }
       });
 
       // Animate pulsing facility ground beacon rings with active entity glowing
@@ -663,9 +672,12 @@ export default function PersistentStage3D({ onSelectNode }) {
       if (optimalPathGroupRef.current && optimalPathGroupRef.current.visible && optimalPathGroupRef.current.pulses && optimalPathGroupRef.current.curve) {
         optimalPathGroupRef.current.pulses.forEach((pulse) => {
           pulse.offset = (pulse.offset + delta * pulse.speed) % 1.0;
-          const pt = optimalPathGroupRef.current.curve.getPointAt(pulse.offset);
-          pulse.mesh.position.copy(pt);
-          pulse.mesh.position.y += 2.0;
+          const clampedOffset = Math.min(0.9999, Math.max(0, pulse.offset));
+          const pt = optimalPathGroupRef.current.curve.getPointAt(clampedOffset);
+          if (pt) {
+            pulse.mesh.position.copy(pt);
+            pulse.mesh.position.y += 2.0;
+          }
         });
       }
 
@@ -689,8 +701,10 @@ export default function PersistentStage3D({ onSelectNode }) {
       }
 
       // 1. TRK-MH-01 3D Pose Calculation
-      const tPos1 = curve1.getPointAt(truck1StateRef.current.progress);
-      const tNext1 = curve1.getPointAt((truck1StateRef.current.progress + 0.006) % 1.0);
+      const p1 = Math.min(0.9999, Math.max(0, truck1StateRef.current.progress));
+      const pNext1 = Math.min(0.9999, Math.max(0, (truck1StateRef.current.progress + 0.006) % 1.0));
+      const tPos1 = curve1.getPointAt(p1);
+      const tNext1 = curve1.getPointAt(pNext1);
       const headingVec1 = new THREE.Vector3().subVectors(tNext1, tPos1).normalize();
       truck1StateRef.current.pos = [tPos1.x, tPos1.y, tPos1.z];
       truck1StateRef.current.look = [tNext1.x, tNext1.y, tNext1.z];
@@ -701,8 +715,10 @@ export default function PersistentStage3D({ onSelectNode }) {
       truck1Group.lookAt(tNext1.x, tPos1.y + 0.85, tNext1.z);
 
       // 2. TRK-MH-02 3D Pose Calculation
-      const tPos2 = curve2.getPointAt(truck2StateRef.current.progress);
-      const tNext2 = curve2.getPointAt((truck2StateRef.current.progress + 0.006) % 1.0);
+      const p2 = Math.min(0.9999, Math.max(0, truck2StateRef.current.progress));
+      const pNext2 = Math.min(0.9999, Math.max(0, (truck2StateRef.current.progress + 0.006) % 1.0));
+      const tPos2 = curve2.getPointAt(p2);
+      const tNext2 = curve2.getPointAt(pNext2);
       const headingVec2 = new THREE.Vector3().subVectors(tNext2, tPos2).normalize();
       truck2StateRef.current.pos = [tPos2.x, tPos2.y, tPos2.z];
       truck2StateRef.current.look = [tNext2.x, tNext2.y, tNext2.z];

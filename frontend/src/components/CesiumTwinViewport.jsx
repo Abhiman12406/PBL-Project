@@ -221,30 +221,50 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
 
       // Attempt to load Cesium World Terrain asynchronously
       if (currentToken) {
-        Cesium.Terrain.fromWorldTerrain({
-          requestVertexNormals: true,
-          requestWaterMask: true
-        })
-          .then((terrainProvider) => {
-            if (viewerRef.current && !viewerRef.current.isDestroyed()) {
-              viewerRef.current.terrainProvider = terrainProvider;
+        try {
+          if (typeof Cesium.Terrain?.fromWorldTerrain === 'function') {
+            const terrain = Cesium.Terrain.fromWorldTerrain({
+              requestVertexNormals: true,
+              requestWaterMask: true
+            });
+            if (terrain && typeof terrain.then === 'function') {
+              terrain.then((tp) => {
+                if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+                  viewerRef.current.terrainProvider = tp;
+                }
+              }).catch((err) => console.warn('Cesium World Terrain fallback triggered:', err));
+            } else if (viewer.scene?.setTerrain) {
+              viewer.scene.setTerrain(terrain);
+            } else {
+              viewer.terrain = terrain;
             }
-          })
-          .catch((err) => {
-            console.warn('Cesium World Terrain fallback triggered:', err);
-          });
+          } else if (typeof Cesium.createWorldTerrainAsync === 'function') {
+            Cesium.createWorldTerrainAsync({
+              requestVertexNormals: true,
+              requestWaterMask: true
+            }).then((tp) => {
+              if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+                viewerRef.current.terrainProvider = tp;
+              }
+            }).catch((err) => console.warn('Cesium World Terrain fallback triggered:', err));
+          }
+        } catch (terrainErr) {
+          console.warn('Cesium World Terrain loading note:', terrainErr);
+        }
 
         // Attempt to load Cesium OSM 3D Buildings
-        Cesium.createOsmBuildingsAsync()
-          .then((buildingTileset) => {
-            if (viewerRef.current && !viewerRef.current.isDestroyed()) {
-              osmBuildingsTilesetRef.current = buildingTileset;
-              viewerRef.current.scene.primitives.add(buildingTileset);
-            }
-          })
-          .catch((err) => {
-            console.warn('Cesium 3D Buildings fallback triggered:', err);
-          });
+        if (typeof Cesium.createOsmBuildingsAsync === 'function') {
+          Cesium.createOsmBuildingsAsync()
+            .then((buildingTileset) => {
+              if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+                osmBuildingsTilesetRef.current = buildingTileset;
+                viewerRef.current.scene.primitives.add(buildingTileset);
+              }
+            })
+            .catch((err) => {
+              console.warn('Cesium 3D Buildings fallback triggered:', err);
+            });
+        }
       }
 
       // Initial camera positioning: Western India corridor overview

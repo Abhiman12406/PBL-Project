@@ -54,15 +54,52 @@ export function disposeThreeScene(scene, renderer) {
     if (typeof renderer.dispose === 'function') {
       renderer.dispose();
     }
-    if (typeof renderer.forceContextLoss === 'function') {
-      try {
-        renderer.forceContextLoss();
-      } catch {
-        // ignore if already lost
-      }
-    }
   }
 }
+
+/**
+ * Ensures getShaderPrecisionFormat never returns null in any browser or GPU environment.
+ * Prevents Three.js WebGLCapabilities from throwing "Cannot read properties of null (reading 'precision')".
+ */
+export function ensureSafeShaderPrecisionFormat() {
+  if (typeof window === 'undefined') return;
+
+  const contexts = [
+    typeof window.WebGLRenderingContext !== 'undefined' ? window.WebGLRenderingContext : null,
+    typeof window.WebGL2RenderingContext !== 'undefined' ? window.WebGL2RenderingContext : null
+  ].filter(Boolean);
+
+  contexts.forEach((ContextClass) => {
+    if (!ContextClass || !ContextClass.prototype) return;
+    const proto = ContextClass.prototype;
+    if (proto.__safePrecisionPatched) return;
+
+    const originalGetPrecision = proto.getShaderPrecisionFormat;
+    proto.getShaderPrecisionFormat = function(shaderType, precisionType) {
+      let result = null;
+      if (typeof originalGetPrecision === 'function') {
+        try {
+          result = originalGetPrecision.call(this, shaderType, precisionType);
+        } catch {
+          result = null;
+        }
+      }
+      if (result && typeof result.precision === 'number') {
+        return result;
+      }
+      // Return safe precision fallback to let Three.js degrade gracefully without throwing
+      return {
+        rangeMin: 0,
+        rangeMax: 0,
+        precision: 0
+      };
+    };
+    proto.__safePrecisionPatched = true;
+  });
+}
+
+// Automatically apply shader precision safety guard when module is imported
+ensureSafeShaderPrecisionFormat();
 
 /**
  * Safely checks whether WebGL is supported and available in the current browser/DOM environment.
@@ -72,10 +109,13 @@ export function disposeThreeScene(scene, renderer) {
  */
 export function isWebGLAvailable(testCanvas) {
   try {
+    ensureSafeShaderPrecisionFormat();
     const canvas = testCanvas || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
     if (!canvas || typeof canvas.getContext !== 'function') return false;
     const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    return Boolean(gl && gl.getParameter);
+    if (!gl) return false;
+    if (typeof gl.isContextLost === 'function' && gl.isContextLost()) return false;
+    return typeof gl.getParameter === 'function';
   } catch {
     return false;
   }
