@@ -3,8 +3,10 @@ import {
   DOCK_SERVICES,
   WORKSPACE_STORAGE_KEY,
   clampCoordinates,
+  clampWindowGeometry,
   isServiceAllowed
 } from '../constants/dockConfig';
+
 import { usePersona } from './PersonaContext';
 
 const WorkspaceContext = createContext(null);
@@ -91,6 +93,7 @@ export function WorkspaceProvider({ children }) {
   const [windows, setWindows] = useState(() => loadStoredWorkspace());
   const [highestZIndex, setHighestZIndex] = useState(25);
   const [activeStageEngine, setActiveStageEngine] = useState('tactical_3d'); // 'tactical_3d' | 'cesium_gis'
+  const [cameraMode, setCameraMode] = useState('CHASE'); // 'CHASE' | 'COCKPIT' | 'DRONE' | 'FREE_ORBIT'
   const [pipMinimized, setPipMinimized] = useState(false);
   const [selectedFacilityId, setSelectedFacilityId] = useState('DC-BHW-01');
   const [activeVehicleId, setActiveVehicleId] = useState('TRK-MH-01');
@@ -141,7 +144,7 @@ export function WorkspaceProvider({ children }) {
     }
   }, [windows]);
 
-  // Adjust window coordinates on browser viewport resize
+  // Adjust window coordinates and geometry on browser viewport resize
   useEffect(() => {
     const handleResize = () => {
       setWindows((prev) => {
@@ -150,9 +153,18 @@ export function WorkspaceProvider({ children }) {
         Object.keys(next).forEach((id) => {
           const win = next[id];
           if (!win.isMaximized) {
-            const clamped = clampCoordinates(win.position, win.size, window.innerWidth, window.innerHeight);
-            if (clamped.x !== win.position.x || clamped.y !== win.position.y) {
-              next[id] = { ...win, position: clamped };
+            const clamped = clampWindowGeometry(win.position, win.size, window.innerWidth, window.innerHeight);
+            if (
+              clamped.position.x !== win.position.x ||
+              clamped.position.y !== win.position.y ||
+              clamped.size.width !== win.size.width ||
+              clamped.size.height !== win.size.height
+            ) {
+              next[id] = {
+                ...win,
+                position: clamped.position,
+                size: clamped.size
+              };
               changed = true;
             }
           }
@@ -164,6 +176,7 @@ export function WorkspaceProvider({ children }) {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
 
   const bringToFront = useCallback((id) => {
     setHighestZIndex((prevMax) => {
@@ -521,6 +534,9 @@ export function WorkspaceProvider({ children }) {
     activeStageEngine,
     setActiveStageEngine,
     toggleStageEngine,
+    cameraMode,
+    setCameraMode,
+    clampWindowGeometry,
     pipMinimized,
     setPipMinimized,
     selectedFacilityId,
@@ -568,6 +584,8 @@ export function WorkspaceProvider({ children }) {
     activeStageEngine,
     setActiveStageEngine,
     toggleStageEngine,
+    cameraMode,
+    setCameraMode,
     pipMinimized,
     selectedFacilityId,
     activeVehicleId,
@@ -599,6 +617,7 @@ export function WorkspaceProvider({ children }) {
     restoreAll,
     isAllowed
   ]);
+
 
   return (
     <WorkspaceContext.Provider value={value}>

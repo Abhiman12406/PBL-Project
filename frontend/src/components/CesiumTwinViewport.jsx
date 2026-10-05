@@ -40,6 +40,8 @@ import {
 } from '../constants/logisticsTopology';
 import { calculateSchematicVehiclePos } from '../utils/engineSynchronization';
 import AutonomousSentinelHUD from './AutonomousSentinelHUD';
+import { setupContextLossHandlers } from '../utils/webglHardening';
+
 
 export {
   SCHEMATIC_COORDS,
@@ -98,9 +100,9 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [hoveredNode, setHoveredNode] = useState(null);
   const [useSchematicView, setUseSchematicView] = useState(() => {
-    // In PiP mode without token, start with high-performance 2.5D schematic view
+    // If Cesium Ion token is absent or network fails, gracefully drop to 2D schematic radar
     const token = typeof window !== 'undefined' ? (import.meta.env?.VITE_CESIUM_ION_TOKEN || '') : '';
-    return isPiP && !token;
+    return !token || !token.trim();
   });
   const [webglError, setWebglError] = useState(null);
   const [customToken, setCustomToken] = useState('');
@@ -112,6 +114,16 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
   const effectiveShowTopRibbon = isPiP ? false : showTopRibbon;
   const effectiveShowSentinelHUD = isPiP ? false : showSentinelHUD;
   const effectiveShowControls = isPiP ? false : showViewportControls;
+
+  // Network offline listener to gracefully fall back to 2D schematic radar
+  useEffect(() => {
+    const handleOffline = () => {
+      console.warn('[CesiumTwin] Offline network status detected. Falling back to 2D Schematic Radar.');
+      setUseSchematicView(true);
+    };
+    window.addEventListener('offline', handleOffline);
+    return () => window.removeEventListener('offline', handleOffline);
+  }, []);
 
   // Calculate live stock map for facilities
   const liveStockMap = useMemo(() => {
@@ -169,9 +181,12 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
         console.warn('Failed to assign Cesium Ion token:', err);
       }
     } else {
-      console.warn('VITE_CESIUM_ION_TOKEN is not configured. Falling back to default Cesium basemap / schematic view.');
+      console.warn('VITE_CESIUM_ION_TOKEN is not configured. Falling back to default 2D schematic radar view.');
       setTokenMissing(true);
+      setUseSchematicView(true);
+      return;
     }
+
 
     let viewer;
     try {
@@ -274,6 +289,22 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
         }
       }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
+      // WebGL Context Loss safety guard
+      let cleanupContextLoss = null;
+      if (scene && scene.canvas) {
+        cleanupContextLoss = setupContextLossHandlers(
+          scene.canvas,
+          () => {
+            console.warn('[CesiumTwin] Cesium WebGL context lost. Gracefully falling back to 2D schematic radar.');
+            setWebglError('Cesium WebGL Context Lost');
+            setUseSchematicView(true);
+          },
+          () => {
+            console.info('[CesiumTwin] Cesium WebGL context restored.');
+          }
+        );
+      }
+
       setIsViewerReady(true);
       setWebglError(null);
     } catch (err) {
@@ -294,6 +325,7 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
       truckEntityRef.current = null;
       setIsViewerReady(false);
     };
+
   }, [sessionToken, useSchematicView]);
 
   // Container resize observer for smooth PiP / full-screen transitions

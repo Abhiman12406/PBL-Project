@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { usePersona } from '../context/PersonaContext';
+import ErrorBoundary from './ErrorBoundary';
+
 
 export default function GlassPanel({
   id,
@@ -281,8 +283,11 @@ export default function GlassPanel({
             </div>
           </div>
         ) : (
-          children
+          <ErrorBoundary name={title || 'Operational Service Panel'}>
+            {children}
+          </ErrorBoundary>
         )}
+
       </div>
 
       {/* Interactive Bottom-Right Corner Resize Handle */}

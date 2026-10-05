@@ -62,6 +62,13 @@ import {
 } from './3d/proceduralWorld.js';
 import { createProceduralTruck, createRoadblockBarricade } from './3d/proceduralModels.js';
 import CockpitHUD from './CockpitHUD';
+import {
+  disposeThreeScene,
+  setupContextLossHandlers,
+  shouldThrottleRender
+} from '../utils/webglHardening.js';
+import { useGlobalKeyboardShortcuts } from '../utils/keyboardShortcuts.js';
+
 
 export {
   STAGE_NODES,
@@ -85,6 +92,9 @@ export default function PersistentStage3D({ onSelectNode }) {
     activeStageEngine,
     setActiveStageEngine,
     toggleStageEngine,
+    cameraMode: workspaceCameraMode,
+    setCameraMode: setWorkspaceCameraMode,
+    minimizeAll,
     pipMinimized,
     setPipMinimized,
     selectedFacilityId,
@@ -113,6 +123,12 @@ export default function PersistentStage3D({ onSelectNode }) {
   // Reactive UI State
   const [fps, setFps] = useState(60);
   const [cameraMode, setCameraMode] = useState(CAMERA_MODES.CHASE);
+  const effectiveCameraMode = workspaceCameraMode || cameraMode;
+  const setEffectiveCameraMode = useCallback((mode) => {
+    setCameraMode(mode);
+    if (setWorkspaceCameraMode) setWorkspaceCameraMode(mode);
+  }, [setWorkspaceCameraMode]);
+
   const [activeCamView, setActiveCamView] = useState('CHASE');
   const [hoveredNode, setHoveredNode] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
@@ -120,6 +136,8 @@ export default function PersistentStage3D({ onSelectNode }) {
   const [hudMinimized, setHudMinimized] = useState(false);
   const [simSpeed, setSimSpeed] = useState(1);
   const [isPaused, setIsPaused] = useState(false);
+  const isContextLostRef = useRef(false);
+
 
   // Synchronized Vehicle WGS84 GPS State
   const [vehicleGps, setVehicleGps] = useState({
@@ -230,8 +248,9 @@ export default function PersistentStage3D({ onSelectNode }) {
   }, [simState]);
 
   useEffect(() => {
-    cameraModeRef.current = cameraMode;
-  }, [cameraMode]);
+    cameraModeRef.current = effectiveCameraMode;
+  }, [effectiveCameraMode]);
+
 
   // Initialize Three.js 3D Procedural Logistics World
   useEffect(() => {
@@ -529,8 +548,20 @@ export default function PersistentStage3D({ onSelectNode }) {
     const animate = (time) => {
       animFrameIdRef.current = requestAnimationFrame(animate);
 
+      // Throttling guard: throttle when document is hidden, context lost, or hidden
+      if (shouldThrottleRender({
+        documentHidden: typeof document !== 'undefined' && document.hidden,
+        isContextLost: isContextLostRef.current,
+        isEnginePrimary: activeStageEngine === STAGE_ENGINES.TACTICAL_3D,
+        isPiPVisible: !pipMinimized
+      })) {
+        lastTime = time;
+        return;
+      }
+
       const delta = Math.min(0.1, (time - lastTime) / 1000);
       lastTime = time;
+
 
       // FPS tracking
       frameCount++;
@@ -789,6 +820,22 @@ export default function PersistentStage3D({ onSelectNode }) {
       renderer.render(scene, camera);
     };
 
+    // Setup WebGL Context Loss Handlers
+    const cleanupContextLoss = setupContextLossHandlers(
+      canvasRef.current,
+      () => {
+        console.warn('[PersistentStage3D] WebGL context lost. Pausing render loop.');
+        isContextLostRef.current = true;
+        if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+      },
+      () => {
+        console.info('[PersistentStage3D] WebGL context restored. Resuming render loop.');
+        isContextLostRef.current = false;
+        lastTime = performance.now();
+        animFrameIdRef.current = requestAnimationFrame(animate);
+      }
+    );
+
     animFrameIdRef.current = requestAnimationFrame(animate);
 
     // 13. Window & Container Resize Handler with ResizeObserver
@@ -810,42 +857,22 @@ export default function PersistentStage3D({ onSelectNode }) {
     return () => {
       window.removeEventListener('resize', updateSize);
       ro.disconnect();
+      cleanupContextLoss();
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
-      renderer.dispose();
-      scene.clear();
+      disposeThreeScene(scene, renderer);
     };
   }, []);
 
-  // Keyboard shortcut listener for camera perspective & engine switching
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  // Global operational keyboard shortcuts listener
+  useGlobalKeyboardShortcuts({
+    onCameraMode: (mode) => setEffectiveCameraMode(mode),
+    onTogglePlayPause: () => setIsPaused((prev) => !prev),
+    onSwapPip: () => toggleStageEngine && toggleStageEngine(),
+    onDismissPanels: () => minimizeAll && minimizeAll(),
+    onSetEngine: (eng) => setActiveStageEngine && setActiveStageEngine(eng),
+    onResetCamera: () => resetFreeLook()
+  });
 
-      if (e.key === '1') setCameraMode(CAMERA_MODES.CHASE);
-      else if (e.key === '2') setCameraMode(CAMERA_MODES.COCKPIT);
-      else if (e.key === '3') setCameraMode(CAMERA_MODES.DRONE);
-      else if (e.key === '4') setCameraMode(CAMERA_MODES.FREE_ORBIT);
-      else if (e.key === 't' || e.key === 'T') {
-        if (setActiveStageEngine) setActiveStageEngine(STAGE_ENGINES.TACTICAL_3D);
-      } else if (e.key === 'm' || e.key === 'M') {
-        if (setActiveStageEngine) setActiveStageEngine(STAGE_ENGINES.CESIUM_GIS);
-      } else if (e.key === 'Tab' || e.key === 'e' || e.key === 'E') {
-        e.preventDefault();
-        if (toggleStageEngine) toggleStageEngine();
-      } else if (e.key === ' ' || e.code === 'Space') {
-        e.preventDefault();
-        setIsPaused((prev) => !prev);
-      } else if (e.key === 'r' || e.key === 'R') {
-        // Reset Chase Free-Look
-        freeLookRef.current.yaw = 0;
-        freeLookRef.current.pitch = 0.15;
-        freeLookRef.current.distance = 14.0;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setActiveStageEngine, toggleStageEngine]);
 
   // Glides camera smoothly to preset target in Free Orbit mode
   const glideCameraTo = useCallback((targetPos, lookAtTarget) => {

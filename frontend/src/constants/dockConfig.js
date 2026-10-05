@@ -118,6 +118,30 @@ export function clampCoordinates(pos, size, viewportWidth, viewportHeight) {
 }
 
 /**
+ * Fully adapts and clamps window geometry (size & position) across any desktop resolution.
+ * Ensures panels are always reachable, never off-screen, and fit within available bounds.
+ */
+export function clampWindowGeometry(pos, size, viewportWidth, viewportHeight) {
+  const minWidth = 320;
+  const minHeight = 240;
+  const maxWidth = Math.max(minWidth, viewportWidth - 16);
+  const maxHeight = Math.max(minHeight, viewportHeight - 142); // 62px top header + 80px dock
+
+  const clampedWidth = Math.round(Math.max(minWidth, Math.min(size.width, maxWidth)));
+  const clampedHeight = Math.round(Math.max(minHeight, Math.min(size.height, maxHeight)));
+
+  const clampedPos = clampCoordinates(pos, { width: clampedWidth, height: clampedHeight }, viewportWidth, viewportHeight);
+
+  return {
+    position: clampedPos,
+    size: {
+      width: clampedWidth,
+      height: clampedHeight
+    }
+  };
+}
+
+/**
  * Helper to determine if a persona has access to a dock item.
  */
 export function isServiceAllowed(currentRole, userPermissions, viewRequired) {
@@ -125,3 +149,4 @@ export function isServiceAllowed(currentRole, userPermissions, viewRequired) {
   const views = userPermissions?.views || [];
   return views.includes('*') || views.includes(viewRequired);
 }
+
