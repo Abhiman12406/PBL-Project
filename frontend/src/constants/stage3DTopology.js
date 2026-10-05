@@ -57,6 +57,22 @@ export const STAGE_NODES = [
   }
 ];
 
+export const PUNE_FC_NODE = {
+  id: 'FC-PUN-01',
+  code: 'PUNE',
+  name: 'Pune Auto Fulfillment Center',
+  tier: 'Tier 3 Auto FC',
+  pos: [28, 5.5, 42],
+  color: '#3b82f6', // Cobalt Blue
+  iconName: 'Warehouse',
+  details: 'High-velocity automotive assembly and industrial components center fed via Mumbai-Pune Expressway.'
+};
+
+export const STAGE_FACILITIES = [
+  ...STAGE_NODES,
+  PUNE_FC_NODE
+];
+
 export const CAMERA_VIEWS = {
   OVERVIEW: {
     name: 'Corridor Overview',
@@ -82,5 +98,11 @@ export const CAMERA_VIEWS = {
     name: 'Nashik Agro Depot',
     position: [34, 18, -32],
     target: [42, 6.5, -48]
+  },
+  PUNE_FC: {
+    name: 'Pune Auto Center',
+    position: [20, 16, 58],
+    target: [28, 5.5, 42]
   }
 };
+
