@@ -25,9 +25,20 @@ import {
   Pause,
   FastForward,
   Rotate3d,
-  Crosshair
+  Crosshair,
+  Globe,
+  ArrowLeftRight
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext.jsx';
+import CesiumTwinViewport from './CesiumTwinViewport';
+import ViewportEngineSelector from './ViewportEngineSelector';
+import {
+  STAGE_ENGINES,
+  ENGINE_METADATA,
+  mapFacilityBetweenEngines,
+  calculateSynchronizedVehicleState
+} from '../utils/engineSynchronization';
+import { worldToWgs84Coordinates } from '../utils/coordinateTransforms';
 import {
   STAGE_NODES,
   STAGE_FACILITIES,
@@ -68,7 +79,16 @@ const ICON_MAP = {
 export default function PersistentStage3D({ onSelectNode }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
-  const { activeStageEngine, setActiveStageEngine } = useWorkspace();
+  const cesiumContainerRef = useRef(null);
+  const {
+    activeStageEngine,
+    setActiveStageEngine,
+    toggleStageEngine,
+    pipMinimized,
+    setPipMinimized,
+    selectedFacilityId,
+    setSelectedFacilityId
+  } = useWorkspace();
 
   // Reactive UI State
   const [fps, setFps] = useState(60);
@@ -80,6 +100,18 @@ export default function PersistentStage3D({ onSelectNode }) {
   const [hudMinimized, setHudMinimized] = useState(false);
   const [simSpeed, setSimSpeed] = useState(1); // 0 = paused, 1 = 1x, 2 = 2x, 4 = 4x
   const [isPaused, setIsPaused] = useState(false);
+
+  // Synchronized Vehicle WGS84 GPS State
+  const [vehicleGps, setVehicleGps] = useState({
+    id: 'TRK-MH-01',
+    model: 'Volvo FH Electric (Cold-Chain)',
+    progress: 0.08,
+    speedKmh: 64,
+    latitude: 18.9496,
+    longitude: 72.9515,
+    altitudeM: 5,
+    headingDeg: 38
+  });
 
   // Live Vehicle Telematics state
   const [vehicleTelematics, setVehicleTelematics] = useState({
@@ -380,6 +412,21 @@ export default function PersistentStage3D({ onSelectNode }) {
           headingDeg,
           corridorLeg
         }));
+
+        // Update synchronized WGS84 GPS coordinate for Cesium Twin & HUD
+        const syncVehicle = calculateSynchronizedVehicleState({
+          progress: truckStateRef.current.progress,
+          worldPos: [tPos.x, tPos.y, tPos.z],
+          headingVec: [headingVec.x, headingVec.y, headingVec.z],
+          speedKmh: effectiveSpeedMult === 0 ? 0 : speedKmh,
+          baseTelematics: {
+            id: 'TRK-MH-01',
+            model: 'Volvo FH Electric (Cold-Chain)',
+            socPercent: 82,
+            cargoTempC: -18.4
+          }
+        });
+        setVehicleGps(syncVehicle);
       }
 
       // Update Camera based on current Active Camera Mode
@@ -449,27 +496,32 @@ export default function PersistentStage3D({ onSelectNode }) {
 
     animFrameIdRef.current = requestAnimationFrame(animate);
 
-    // 13. Window Resize Handler
-    const handleResize = () => {
+    // 13. Window & Container Resize Handler with ResizeObserver
+    const updateSize = () => {
       if (!containerRef.current || !renderer || !camera) return;
       const w = containerRef.current.clientWidth || window.innerWidth;
       const h = containerRef.current.clientHeight || window.innerHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      if (w > 0 && h > 0) {
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      }
     };
 
-    window.addEventListener('resize', handleResize);
+    const ro = new ResizeObserver(updateSize);
+    if (containerRef.current) ro.observe(containerRef.current);
+    window.addEventListener('resize', updateSize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', updateSize);
+      ro.disconnect();
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
       renderer.dispose();
       scene.clear();
     };
   }, []);
 
-  // Keyboard shortcut listener for instantaneous perspective switching
+  // Keyboard shortcut listener for camera perspective & engine switching
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -478,7 +530,14 @@ export default function PersistentStage3D({ onSelectNode }) {
       else if (e.key === '2') setCameraMode(CAMERA_MODES.COCKPIT);
       else if (e.key === '3') setCameraMode(CAMERA_MODES.DRONE);
       else if (e.key === '4') setCameraMode(CAMERA_MODES.FREE_ORBIT);
-      else if (e.key === ' ' || e.code === 'Space') {
+      else if (e.key === 't' || e.key === 'T') {
+        if (setActiveStageEngine) setActiveStageEngine(STAGE_ENGINES.TACTICAL_3D);
+      } else if (e.key === 'm' || e.key === 'M') {
+        if (setActiveStageEngine) setActiveStageEngine(STAGE_ENGINES.CESIUM_GIS);
+      } else if (e.key === 'Tab' || e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        if (toggleStageEngine) toggleStageEngine();
+      } else if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
         setIsPaused((prev) => !prev);
       } else if (e.key === 'r' || e.key === 'R') {
@@ -491,7 +550,7 @@ export default function PersistentStage3D({ onSelectNode }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [setActiveStageEngine, toggleStageEngine]);
 
   // Glides camera smoothly to preset target in Free Orbit mode
   const glideCameraTo = useCallback((targetPos, lookAtTarget) => {
@@ -521,12 +580,31 @@ export default function PersistentStage3D({ onSelectNode }) {
     requestAnimationFrame(animateGlide);
   }, []);
 
+  // Facility selection synchronized from Macro Cesium GIS
+  const handleSelectFacilityFromCesium = useCallback((nodeId) => {
+    if (!nodeId) return;
+    if (setSelectedFacilityId) setSelectedFacilityId(nodeId);
+    const mapped = mapFacilityBetweenEngines(nodeId);
+    if (mapped.stageNode) {
+      setSelectedNode(mapped.stageNode);
+      glideCameraTo(
+        [mapped.stageNode.pos[0] + 18, mapped.stageNode.pos[1] + 15, mapped.stageNode.pos[2] + 22],
+        mapped.stageNode.pos
+      );
+    }
+    if (onSelectNode) onSelectNode(nodeId);
+  }, [glideCameraTo, onSelectNode, setSelectedFacilityId]);
+
   // Select camera view preset
   const handleSelectView = (presetKey) => {
     const preset = CAMERA_VIEWS[presetKey];
     if (!preset) return;
     setActiveCamView(presetKey);
     glideCameraTo(preset.position, preset.target);
+    const mapped = mapFacilityBetweenEngines(presetKey);
+    if (mapped.cesiumNode && setSelectedFacilityId) {
+      setSelectedFacilityId(mapped.cesiumNode.node_id);
+    }
   };
 
   // Mouse Drag Handlers: supports Free-Look in Chase mode, Orbit/Pan in Free Orbit mode
@@ -637,6 +715,7 @@ export default function PersistentStage3D({ onSelectNode }) {
       const foundNode = STAGE_FACILITIES.find((n) => n.id === nodeId);
       if (foundNode) {
         setSelectedNode(foundNode);
+        if (setSelectedFacilityId) setSelectedFacilityId(foundNode.id);
         glideCameraTo(
           [foundNode.pos[0] + 18, foundNode.pos[1] + 15, foundNode.pos[2] + 22],
           foundNode.pos
@@ -652,168 +731,311 @@ export default function PersistentStage3D({ onSelectNode }) {
     freeLookRef.current.distance = 14.0;
   };
 
+  const isTacticalPrimary = activeStageEngine === STAGE_ENGINES.TACTICAL_3D;
+  const isCesiumPrimary = activeStageEngine === STAGE_ENGINES.CESIUM_GIS;
+
   return (
-    <div
-      ref={containerRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onWheel={handleWheel}
-      onContextMenu={(e) => e.preventDefault()}
-      className="fixed inset-0 w-full h-full pointer-events-auto z-0 overflow-hidden bg-[#020617] select-none"
-    >
-      {/* 3D WebGL Canvas */}
-      <canvas
-        ref={canvasRef}
-        onClick={handleCanvasClick}
-        className="absolute inset-0 w-full h-full block cursor-grab active:cursor-grabbing"
-      />
+    <div className="fixed inset-0 w-full h-full pointer-events-auto z-0 overflow-hidden bg-[#020617] select-none">
+      {/* 1. Floating Glassmorphic Viewport Engine Selector (Top Center) */}
+      <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300">
+        <ViewportEngineSelector
+          activeEngine={activeStageEngine}
+          onSelectEngine={(engine) => setActiveStageEngine && setActiveStageEngine(engine)}
+          isPiPVisible={!pipMinimized}
+          onTogglePiP={() => setPipMinimized && setPipMinimized(!pipMinimized)}
+        />
+      </div>
 
-      {/* Atmospheric Vignette Overlay */}
-      <div className="absolute inset-0 pointer-events-none bg-radial from-transparent via-[#020617]/20 to-[#020617]/70" />
-
-      {/* Top-Left Camera Suite Toolbar & Telemetry Header */}
-      <div className="absolute top-18 left-6 z-20 flex flex-col gap-2 pointer-events-none">
-        {/* Stage Status & FPS Badge */}
-        <div className="pointer-events-auto cyber-glass rounded-xl p-2.5 px-3 border border-slate-700/60 text-slate-100 flex items-center gap-3 shadow-xl backdrop-blur-xl">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-xs font-mono font-bold text-emerald-400">R3F SIMULATOR</span>
+      {/* 2. Tactical 3D World Container (Full-screen when Primary, PiP when Secondary) */}
+      <div
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onWheel={handleWheel}
+        onContextMenu={(e) => e.preventDefault()}
+        className={
+          isTacticalPrimary
+            ? 'absolute inset-0 w-full h-full z-0 pointer-events-auto'
+            : pipMinimized
+            ? 'hidden'
+            : 'fixed bottom-22 right-6 w-96 h-60 z-30 rounded-2xl overflow-hidden border border-cyan-500/60 shadow-[0_10px_35px_rgba(0,0,0,0.75)] cyber-glass pointer-events-auto transition-all duration-300 group'
+        }
+      >
+        {/* If in PiP mode, show mini top bar */}
+        {!isTacticalPrimary && !pipMinimized && (
+          <div className="absolute top-0 inset-x-0 h-8 px-3 bg-slate-950/85 border-b border-slate-800/80 flex items-center justify-between z-20 text-slate-200 select-none">
+            <div
+              onClick={() => setActiveStageEngine && setActiveStageEngine(STAGE_ENGINES.TACTICAL_3D)}
+              className="flex items-center gap-2 cursor-pointer hover:text-white transition"
+              title="Click to promote Tactical 3D to Full-Screen Stage"
+            >
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <Truck className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-[11px] font-extrabold uppercase tracking-wide">Tactical 3D</span>
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 font-bold">
+                CHASE PiP
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveStageEngine && setActiveStageEngine(STAGE_ENGINES.TACTICAL_3D)}
+                className="p-1 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition"
+                title="Promote Tactical 3D to Full Screen"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPipMinimized && setPipMinimized(true)}
+                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                title="Minimize PiP Window"
+              >
+                <Minimize2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-          <span className="text-slate-600">|</span>
-          <span className="text-xs font-mono font-semibold text-slate-300">
-            {fps} FPS
-          </span>
-          <span className="text-slate-600">|</span>
-          <span className="text-xs font-mono text-cyan-400 font-bold">
-            {CAMERA_MODE_METADATA[cameraMode]?.badge}
-          </span>
-          <button
-            onClick={() => setHudMinimized(!hudMinimized)}
-            className="text-slate-400 hover:text-white p-1 rounded transition ml-1"
-            title={hudMinimized ? 'Expand Camera Suite' : 'Minimize Camera Suite'}
-          >
-            {hudMinimized ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-          </button>
-        </div>
+        )}
 
-        {!hudMinimized && (
-          <div className="pointer-events-auto cyber-glass rounded-xl p-3 border border-slate-700/60 shadow-xl flex flex-col gap-2.5 backdrop-blur-xl max-w-xs">
-            {/* Perspective Mode Switcher Buttons */}
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
-                <span>Camera Suite</span>
-                <span className="text-[9px] font-mono text-slate-500">HOTKEYS [1-4]</span>
+        {/* 3D WebGL Canvas */}
+        <canvas
+          ref={canvasRef}
+          onClick={isTacticalPrimary ? handleCanvasClick : () => setActiveStageEngine && setActiveStageEngine(STAGE_ENGINES.TACTICAL_3D)}
+          className="absolute inset-0 w-full h-full block cursor-grab active:cursor-grabbing"
+        />
+
+        {/* Atmospheric Vignette Overlay (Full-screen only) */}
+        {isTacticalPrimary && (
+          <div className="absolute inset-0 pointer-events-none bg-radial from-transparent via-[#020617]/20 to-[#020617]/70" />
+        )}
+
+        {/* Top-Left Camera Suite Toolbar (only when Tactical is Primary) */}
+        {isTacticalPrimary && (
+          <div className="absolute top-18 left-6 z-20 flex flex-col gap-2 pointer-events-none">
+            {/* Stage Status & FPS Badge */}
+            <div className="pointer-events-auto cyber-glass rounded-xl p-2.5 px-3 border border-slate-700/60 text-slate-100 flex items-center gap-3 shadow-xl backdrop-blur-xl">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                <span className="text-xs font-mono font-bold text-emerald-400">R3F SIMULATOR</span>
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {/* 1. Chase Cam */}
-                <button
-                  onClick={() => setCameraMode(CAMERA_MODES.CHASE)}
-                  className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold transition text-left ${
-                    cameraMode === CAMERA_MODES.CHASE
-                      ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/50 shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
-                  }`}
-                >
-                  <Truck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                  <div className="leading-tight">
-                    <div>Chase Cam</div>
-                    <div className="text-[9px] font-mono text-slate-400">[1] 3rd-Person</div>
-                  </div>
-                </button>
-
-                {/* 2. Cockpit Dashcam */}
-                <button
-                  onClick={() => setCameraMode(CAMERA_MODES.COCKPIT)}
-                  className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold transition text-left ${
-                    cameraMode === CAMERA_MODES.COCKPIT
-                      ? 'bg-orange-500/25 text-orange-300 border border-orange-500/50 shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
-                  }`}
-                >
-                  <Eye className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                  <div className="leading-tight">
-                    <div>Cockpit</div>
-                    <div className="text-[9px] font-mono text-slate-400">[2] Dashcam</div>
-                  </div>
-                </button>
-
-                {/* 3. Drone God-View */}
-                <button
-                  onClick={() => setCameraMode(CAMERA_MODES.DRONE)}
-                  className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold transition text-left ${
-                    cameraMode === CAMERA_MODES.DRONE
-                      ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
-                  }`}
-                >
-                  <Navigation className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <div className="leading-tight">
-                    <div>Drone POV</div>
-                    <div className="text-[9px] font-mono text-slate-400">[3] Overhead</div>
-                  </div>
-                </button>
-
-                {/* 4. Free Orbit */}
-                <button
-                  onClick={() => setCameraMode(CAMERA_MODES.FREE_ORBIT)}
-                  className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold transition text-left ${
-                    cameraMode === CAMERA_MODES.FREE_ORBIT
-                      ? 'bg-purple-500/25 text-purple-300 border border-purple-500/50 shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
-                  }`}
-                >
-                  <Rotate3d className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <div className="leading-tight">
-                    <div>Free Orbit</div>
-                    <div className="text-[9px] font-mono text-slate-400">[4] Inspect</div>
-                  </div>
-                </button>
-              </div>
+              <span className="text-slate-600">|</span>
+              <span className="text-xs font-mono font-semibold text-slate-300">
+                {fps} FPS
+              </span>
+              <span className="text-slate-600">|</span>
+              <span className="text-xs font-mono text-cyan-400 font-bold">
+                {CAMERA_MODE_METADATA[cameraMode]?.badge}
+              </span>
+              <button
+                onClick={() => setHudMinimized(!hudMinimized)}
+                className="text-slate-400 hover:text-white p-1 rounded transition ml-1"
+                title={hudMinimized ? 'Expand Camera Suite' : 'Minimize Camera Suite'}
+              >
+                {hudMinimized ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+              </button>
             </div>
 
-            {/* In Chase Mode: Free-look reset button */}
-            {cameraMode === CAMERA_MODES.CHASE && (
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-mono">Drag to Orbit View</span>
-                <button
-                  onClick={resetFreeLook}
-                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono text-cyan-300 flex items-center gap-1 transition"
-                  title="Re-align camera directly behind moving vehicle [R]"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reset Chase [R]</span>
-                </button>
+            {!hudMinimized && (
+              <div className="pointer-events-auto cyber-glass rounded-xl p-3 border border-slate-700/60 shadow-xl flex flex-col gap-2.5 backdrop-blur-xl max-w-xs">
+                {/* Perspective Mode Switcher Buttons */}
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
+                    <span>Camera Suite</span>
+                    <span className="text-[9px] font-mono text-slate-500">HOTKEYS [1-4]</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {/* 1. Chase Cam */}
+                    <button
+                      onClick={() => setCameraMode(CAMERA_MODES.CHASE)}
+                      className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold transition text-left ${
+                        cameraMode === CAMERA_MODES.CHASE
+                          ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                          : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
+                      }`}
+                    >
+                      <Truck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <div className="leading-tight">
+                        <div>Chase Cam</div>
+                        <div className="text-[9px] font-mono text-slate-400">[1] 3rd-Person</div>
+                      </div>
+                    </button>
+
+                    {/* 2. Cockpit Dashcam */}
+                    <button
+                      onClick={() => setCameraMode(CAMERA_MODES.COCKPIT)}
+                      className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold transition text-left ${
+                        cameraMode === CAMERA_MODES.COCKPIT
+                          ? 'bg-orange-500/25 text-orange-300 border border-orange-500/50 shadow-sm'
+                          : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
+                      }`}
+                    >
+                      <Eye className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                      <div className="leading-tight">
+                        <div>Cockpit</div>
+                        <div className="text-[9px] font-mono text-slate-400">[2] Dashcam</div>
+                      </div>
+                    </button>
+
+                    {/* 3. Drone God-View */}
+                    <button
+                      onClick={() => setCameraMode(CAMERA_MODES.DRONE)}
+                      className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold transition text-left ${
+                        cameraMode === CAMERA_MODES.DRONE
+                          ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 shadow-sm'
+                          : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
+                      }`}
+                    >
+                      <Navigation className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <div className="leading-tight">
+                        <div>Drone POV</div>
+                        <div className="text-[9px] font-mono text-slate-400">[3] Overhead</div>
+                      </div>
+                    </button>
+
+                    {/* 4. Free Orbit */}
+                    <button
+                      onClick={() => setCameraMode(CAMERA_MODES.FREE_ORBIT)}
+                      className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold transition text-left ${
+                        cameraMode === CAMERA_MODES.FREE_ORBIT
+                          ? 'bg-purple-500/25 text-purple-300 border border-purple-500/50 shadow-sm'
+                          : 'text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent'
+                      }`}
+                    >
+                      <Rotate3d className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                      <div className="leading-tight">
+                        <div>Free Orbit</div>
+                        <div className="text-[9px] font-mono text-slate-400">[4] Inspect</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* In Chase Mode: Free-look reset button */}
+                {cameraMode === CAMERA_MODES.CHASE && (
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-mono">Drag to Orbit View</span>
+                    <button
+                      onClick={resetFreeLook}
+                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono text-cyan-300 flex items-center gap-1 transition"
+                      title="Re-align camera directly behind moving vehicle [R]"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset Chase [R]</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Facility Quick Jump Presets */}
+                <div className="pt-2 border-t border-slate-800/80">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Facility Quick Focus</span>
+                    <Compass className="w-3 h-3 text-cyan-400" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {Object.keys(CAMERA_VIEWS).map((key) => {
+                      const view = CAMERA_VIEWS[key];
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => handleSelectView(key)}
+                          className="px-2 py-1 rounded text-[11px] font-medium text-slate-300 hover:bg-slate-800/80 hover:text-white text-left transition truncate"
+                        >
+                          {view.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
-
-            {/* Facility Quick Jump Presets */}
-            <div className="pt-2 border-t border-slate-800/80">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
-                <span>Facility Quick Focus</span>
-                <Compass className="w-3 h-3 text-cyan-400" />
-              </div>
-              <div className="grid grid-cols-2 gap-1">
-                {Object.keys(CAMERA_VIEWS).map((key) => {
-                  const view = CAMERA_VIEWS[key];
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => handleSelectView(key)}
-                      className="px-2 py-1 rounded text-[11px] font-medium text-slate-300 hover:bg-slate-800/80 hover:text-white text-left transition truncate"
-                    >
-                      {view.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         )}
       </div>
 
-      {/* Bottom-Left Live Telematics Cockpit HUD */}
-      <div className="absolute bottom-20 left-6 z-20 pointer-events-auto cyber-glass rounded-2xl p-3.5 border border-slate-700/80 max-w-sm shadow-2xl backdrop-blur-xl">
+      {/* 3. Macro Cesium GIS Container (Full-screen when Primary, PiP when Secondary) */}
+      <div
+        ref={cesiumContainerRef}
+        className={
+          isCesiumPrimary
+            ? 'absolute inset-0 w-full h-full z-0 pointer-events-auto'
+            : pipMinimized
+            ? 'hidden'
+            : 'fixed bottom-22 right-6 w-96 h-60 z-30 rounded-2xl overflow-hidden border border-blue-500/60 shadow-[0_10px_35px_rgba(0,0,0,0.75)] cyber-glass pointer-events-auto transition-all duration-300 group'
+        }
+      >
+        {/* If in PiP mode, show mini top bar */}
+        {!isCesiumPrimary && !pipMinimized && (
+          <div className="absolute top-0 inset-x-0 h-8 px-3 bg-slate-950/85 border-b border-slate-800/80 flex items-center justify-between z-20 text-slate-200 select-none">
+            <div
+              onClick={() => setActiveStageEngine && setActiveStageEngine(STAGE_ENGINES.CESIUM_GIS)}
+              className="flex items-center gap-2 cursor-pointer hover:text-white transition"
+              title="Click to promote Macro Cesium GIS to Full-Screen Stage"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <Globe className="w-3.5 h-3.5 text-blue-400" />
+              <span className="text-[11px] font-extrabold uppercase tracking-wide">Macro Cesium</span>
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-950/80 text-blue-300 border border-blue-800/60 font-bold">
+                GIS PiP
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveStageEngine && setActiveStageEngine(STAGE_ENGINES.CESIUM_GIS)}
+                className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-slate-800 transition"
+                title="Promote Macro Cesium GIS to Full Screen"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPipMinimized && setPipMinimized(true)}
+                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                title="Minimize PiP Window"
+              >
+                <Minimize2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <CesiumTwinViewport
+          isPiP={!isCesiumPrimary}
+          vehicleGps={vehicleGps}
+          selectedNodeId={selectedFacilityId}
+          onSelectNode={handleSelectFacilityFromCesium}
+          onSwapPiP={() => setActiveStageEngine && setActiveStageEngine(STAGE_ENGINES.CESIUM_GIS)}
+        />
+      </div>
+
+      {/* 4. Minimized PiP Floating Restore Capsule */}
+      {pipMinimized && (
+        <div className="fixed bottom-22 right-6 z-30 pointer-events-auto animate-in fade-in zoom-in-95">
+          <button
+            type="button"
+            onClick={() => setPipMinimized && setPipMinimized(false)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl cyber-glass border border-slate-700/80 hover:border-cyan-400/60 shadow-xl backdrop-blur-xl text-slate-200 text-xs font-bold transition hover:scale-105 active:scale-95 group"
+            title="Restore Picture-in-Picture [PiP] Window"
+          >
+            <div className="relative flex items-center justify-center">
+              {isTacticalPrimary ? (
+                <Globe className="w-4 h-4 text-blue-400 group-hover:animate-pulse" />
+              ) : (
+                <Truck className="w-4 h-4 text-cyan-400 group-hover:animate-pulse" />
+              )}
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            </div>
+            <span>
+              {isTacticalPrimary ? 'Open Cesium GIS PiP' : 'Open Tactical 3D PiP'}
+            </span>
+            <Maximize2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-white" />
+          </button>
+        </div>
+      )}
+
+      {/* 5. Bottom-Left Live Telematics Cockpit HUD (Universal Across Both Engines) */}
+      <div className="absolute bottom-22 left-6 z-20 pointer-events-auto cyber-glass rounded-2xl p-3.5 border border-slate-700/80 max-w-sm shadow-2xl backdrop-blur-xl">
         <div className="flex items-center justify-between pb-2 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 font-bold">
@@ -886,11 +1108,15 @@ export default function PersistentStage3D({ onSelectNode }) {
         </div>
       </div>
 
-      {/* Selected Node Telemetry Badge (Bottom-Right or Modal Drawer) */}
+      {/* 6. Selected Node Telemetry Badge */}
       {selectedNode && (() => {
         const NodeIcon = ICON_MAP[selectedNode.iconName] || Anchor;
         return (
-          <div className="absolute bottom-20 right-6 z-20 pointer-events-auto cyber-glass rounded-2xl p-4 border border-slate-700/80 max-w-sm shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-right duration-200">
+          <div
+            className={`fixed bottom-22 z-20 pointer-events-auto cyber-glass rounded-2xl p-4 border border-slate-700/80 max-w-sm shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-right duration-200 ${
+              pipMinimized ? 'right-6' : 'right-[410px]'
+            }`}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div
@@ -920,16 +1146,12 @@ export default function PersistentStage3D({ onSelectNode }) {
         );
       })()}
 
-      {/* Bottom Center Interaction Hint */}
+      {/* 7. Bottom Center Interaction Hint */}
       <div className="absolute bottom-2 left-6 z-10 text-[11px] font-mono text-slate-500 pointer-events-none select-none">
         <span>
-          {cameraMode === CAMERA_MODES.CHASE
-            ? 'Chase Cam Active • Drag Mouse: Free-Look Orbit • Wheel: Distance • R: Reset • 1-4: Switch Camera'
-            : cameraMode === CAMERA_MODES.COCKPIT
-            ? 'Cockpit Dashcam Active • 1: Chase • 3: Drone • 4: Orbit • Space: Pause'
-            : cameraMode === CAMERA_MODES.DRONE
-            ? 'Tactical Drone Active • Overhead corridor monitoring • 1-4: Switch Camera'
-            : 'Free Orbit Active • Left Drag: Orbit • Right Drag: Pan • Wheel: Zoom • Click Beacons: Inspect'}
+          {isTacticalPrimary
+            ? 'Tactical 3D Active • [Tab/E]: Swap to Macro Cesium • Drag: Free-Look • 1-4: Switch Camera • Space: Pause'
+            : 'Macro Cesium GIS Active • [Tab/E]: Swap to Tactical 3D • Click Nodes: Focus • Highways & Shockwaves Active'}
         </span>
       </div>
     </div>

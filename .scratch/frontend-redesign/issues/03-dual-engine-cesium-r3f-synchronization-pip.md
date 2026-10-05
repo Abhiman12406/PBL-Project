@@ -5,11 +5,11 @@ Incorporate CesiumJS alongside the Three.js / React Three Fiber world in a unifi
 
 **Blocked by:** 02: Three.js / R3F Procedural Logistics World & 3rd-Person Chase Cam
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] A floating glassmorphic Viewport Engine Selector allows toggling between 'Tactical R3F Twin' and 'Macro Cesium GIS'.
-- [ ] Switching engines preserves simulation playback time, active vehicle selection, and camera focus without reloading page state.
-- [ ] An interactive Picture-in-Picture (PiP) widget renders in the corner, displaying the alternative engine (e.g., mini Cesium globe radar while in R3F chase mode).
-- [ ] Clicking the PiP window swaps it into the primary full-screen stage and moves the former primary into the PiP inset.
-- [ ] Facility markers and vehicle coordinates stay synchronized across both engines.
-- [ ] If Cesium Ion token is missing or WebGL context encounters limits, Cesium displays a graceful schematic fallback while R3F continues uninterrupted.
+- [x] A floating glassmorphic Viewport Engine Selector allows toggling between 'Tactical R3F Twin' and 'Macro Cesium GIS'.
+- [x] Switching engines preserves simulation playback time, active vehicle selection, and camera focus without reloading page state.
+- [x] An interactive Picture-in-Picture (PiP) widget renders in the corner, displaying the alternative engine (e.g., mini Cesium globe radar while in R3F chase mode).
+- [x] Clicking the PiP window swaps it into the primary full-screen stage and moves the former primary into the PiP inset.
+- [x] Facility markers and vehicle coordinates stay synchronized across both engines.
+- [x] If Cesium Ion token is missing or WebGL context encounters limits, Cesium displays a graceful schematic fallback while R3F continues uninterrupted.

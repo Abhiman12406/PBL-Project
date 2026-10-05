@@ -91,6 +91,12 @@ export function WorkspaceProvider({ children }) {
   const [windows, setWindows] = useState(() => loadStoredWorkspace());
   const [highestZIndex, setHighestZIndex] = useState(25);
   const [activeStageEngine, setActiveStageEngine] = useState('tactical_3d'); // 'tactical_3d' | 'cesium_gis'
+  const [pipMinimized, setPipMinimized] = useState(false);
+  const [selectedFacilityId, setSelectedFacilityId] = useState('DC-BHW-01');
+
+  const toggleStageEngine = useCallback(() => {
+    setActiveStageEngine((prev) => (prev === 'tactical_3d' ? 'cesium_gis' : 'tactical_3d'));
+  }, []);
 
   // Persist to localStorage on modification
   useEffect(() => {
@@ -385,6 +391,11 @@ export function WorkspaceProvider({ children }) {
     highestZIndex,
     activeStageEngine,
     setActiveStageEngine,
+    toggleStageEngine,
+    pipMinimized,
+    setPipMinimized,
+    selectedFacilityId,
+    setSelectedFacilityId,
     openWindow,
     closeWindow,
     minimizeWindow,
@@ -402,6 +413,10 @@ export function WorkspaceProvider({ children }) {
     windows,
     highestZIndex,
     activeStageEngine,
+    setActiveStageEngine,
+    toggleStageEngine,
+    pipMinimized,
+    selectedFacilityId,
     openWindow,
     closeWindow,
     minimizeWindow,

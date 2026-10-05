@@ -38,6 +38,7 @@ import {
   SCHEMATIC_CORRIDOR_PATHS,
   SCHEMATIC_EPICENTERS
 } from '../constants/logisticsTopology';
+import { calculateSchematicVehiclePos } from '../utils/engineSynchronization';
 import AutonomousSentinelHUD from './AutonomousSentinelHUD';
 
 export {
@@ -75,7 +76,10 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
   showLegend = true,
   showViewportControls = true,
   showTopRibbon = true,
-  showSentinelHUD = true
+  showSentinelHUD = true,
+  vehicleGps = null,
+  isPiP = false,
+  onSwapPiP = null
 }, ref) {
   const containerRef = useRef(null);
   const creditContainerRef = useRef(null);
@@ -84,6 +88,7 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
   const corridorEntitiesRef = useRef([]);
   const shockwaveEntitiesRef = useRef([]);
   const osmBuildingsTilesetRef = useRef(null);
+  const truckEntityRef = useRef(null);
 
   const [activePreset, setActivePreset] = useState('CORRIDOR_OVERVIEW');
   const [showBuildings, setShowBuildings] = useState(true);
@@ -92,12 +97,21 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
   const [tokenMissing, setTokenMissing] = useState(false);
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [hoveredNode, setHoveredNode] = useState(null);
-  const [useSchematicView, setUseSchematicView] = useState(false);
+  const [useSchematicView, setUseSchematicView] = useState(() => {
+    // In PiP mode without token, start with high-performance 2.5D schematic view
+    const token = typeof window !== 'undefined' ? (import.meta.env?.VITE_CESIUM_ION_TOKEN || '') : '';
+    return isPiP && !token;
+  });
   const [webglError, setWebglError] = useState(null);
   const [customToken, setCustomToken] = useState('');
   const [sessionToken, setSessionToken] = useState(() => {
     return import.meta.env.VITE_CESIUM_ION_TOKEN || '';
   });
+
+  const effectiveShowLegend = isPiP ? false : showLegend;
+  const effectiveShowTopRibbon = isPiP ? false : showTopRibbon;
+  const effectiveShowSentinelHUD = isPiP ? false : showSentinelHUD;
+  const effectiveShowControls = isPiP ? false : showViewportControls;
 
   // Calculate live stock map for facilities
   const liveStockMap = useMemo(() => {
@@ -277,9 +291,79 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
         }
       }
       viewerRef.current = null;
+      truckEntityRef.current = null;
       setIsViewerReady(false);
     };
   }, [sessionToken, useSchematicView]);
+
+  // Container resize observer for smooth PiP / full-screen transitions
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+        try {
+          viewerRef.current.resize();
+        } catch {
+          // ignore
+        }
+      }
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Synchronized Commercial Freight Vehicle (Truck) on Cesium Globe
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed() || !isViewerReady) return;
+
+    if (!vehicleGps || typeof vehicleGps.latitude !== 'number' || typeof vehicleGps.longitude !== 'number') {
+      if (truckEntityRef.current) {
+        try {
+          viewer.entities.remove(truckEntityRef.current);
+        } catch {
+          // ignore
+        }
+        truckEntityRef.current = null;
+      }
+      return;
+    }
+
+    const { latitude, longitude, altitudeM, speedKmh, id } = vehicleGps;
+    const pos = Cesium.Cartesian3.fromDegrees(longitude, latitude, (altitudeM || 0) + 16);
+    const labelText = `${id || 'TRK-MH-01'} • ${speedKmh || 0} km/h`;
+
+    if (!truckEntityRef.current) {
+      const truckEntity = viewer.entities.add({
+        name: 'NeoLogix Active Freight Vehicle',
+        position: pos,
+        point: {
+          pixelSize: 13,
+          color: Cesium.Color.fromCssColorString('#ff5400'),
+          outlineColor: Cesium.Color.fromCssColorString('#ffffff'),
+          outlineWidth: 2.5,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        },
+        label: {
+          text: labelText,
+          font: 'bold 11px monospace',
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          fillColor: Cesium.Color.fromCssColorString('#38bdf8'),
+          outlineColor: Cesium.Color.fromCssColorString('#020617'),
+          outlineWidth: 3,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -14),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+      });
+      truckEntityRef.current = truckEntity;
+    } else {
+      truckEntityRef.current.position = pos;
+      if (truckEntityRef.current.label) {
+        truckEntityRef.current.label.text = labelText;
+      }
+    }
+  }, [vehicleGps, isViewerReady]);
 
   // 2. Synchronize 3D Facility Entities with in-place updates (Maintains >= 60 FPS)
   useEffect(() => {
@@ -943,6 +1027,43 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
               </g>
             )}
 
+            {/* Synchronized Commercial Freight Vehicle (Truck) on Schematic Corridor */}
+            {vehicleGps && (() => {
+              const vProgress = vehicleGps.progress ?? 0.15;
+              const vPos = calculateSchematicVehiclePos(vProgress);
+              return (
+                <g transform={`translate(${vPos.x}, ${vPos.y})`} className="transition-transform duration-100">
+                  <circle r="16" fill="#ff5400" fillOpacity="0.25" className="animate-ping" />
+                  <circle r="10" fill="#ff5400" stroke="#ffffff" strokeWidth="2.5" filter="url(#corridorGlow)" />
+                  <circle r="4" fill="#ffffff" />
+                  <g transform="translate(0, -20)">
+                    <rect
+                      x="-48"
+                      y="-12"
+                      width="96"
+                      height="20"
+                      rx="5"
+                      fill="#090d16"
+                      fillOpacity="0.95"
+                      stroke="#ff5400"
+                      strokeWidth="1.5"
+                    />
+                    <text
+                      x="0"
+                      y="2"
+                      fill="#38bdf8"
+                      fontSize="9"
+                      fontWeight="900"
+                      fontFamily="monospace"
+                      textAnchor="middle"
+                    >
+                      {vehicleGps.id || 'TRK-MH-01'} • {vehicleGps.speedKmh || 64}k
+                    </text>
+                  </g>
+                </g>
+              );
+            })()}
+
             {/* Multi-Echelon Facility Nodes */}
             {FACILITY_NODES.map((node) => {
               const coords = SCHEMATIC_COORDS[node.node_id];
@@ -1046,8 +1167,22 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
         </div>
       )}
 
+      {/* Compact Status Overlay when operating in PiP Mode */}
+      {isPiP && (
+        <div className="absolute top-2 left-2 z-20 pointer-events-none flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-700/80 text-white text-[10px] font-mono shadow-xl backdrop-blur-md">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+          <span className="font-extrabold text-cyan-300">WGS84 RADAR</span>
+          {vehicleGps && (
+            <>
+              <span className="text-slate-600">|</span>
+              <span className="text-amber-300 font-bold">{vehicleGps.speedKmh} km/h</span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Top Floating Quick-Navigation Camera Ribbon */}
-      {showTopRibbon && (
+      {effectiveShowTopRibbon && (
         <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
           {/* Left: Corridor Header & Cyber Tag */}
           <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-700/80 text-white shadow-lg">
@@ -1124,14 +1259,14 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
       )}
 
       {/* Top-Right: Floating Autonomous AI Sentinel 1Hz HUD */}
-      {showSentinelHUD && (
+      {effectiveShowSentinelHUD && (
         <div className="absolute top-3 right-3 z-20 pointer-events-auto max-w-xs sm:max-w-sm">
           <AutonomousSentinelHUD compact={false} />
         </div>
       )}
 
       {/* Bottom-Left: Holographic Stock Ring Legend, Flow Status, & Active Shock Banner */}
-      {showLegend && (
+      {effectiveShowLegend && (
         <div className="absolute bottom-3 left-3 z-20 pointer-events-auto flex flex-col gap-2 max-w-sm">
           {/* Active Disruption Alert HUD */}
           {activeEpicenter && (
@@ -1209,7 +1344,7 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
       )}
 
       {/* Bottom-Right: Viewport Controls & Highway Conduit Toggles */}
-      {showViewportControls && (
+      {effectiveShowControls && (
         <div className="absolute bottom-3 right-3 z-20 pointer-events-auto flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/80 shadow-xl text-white">
           {/* Toggle between 3D Globe and 3D Schematic Mode */}
           <button
@@ -1286,7 +1421,7 @@ const CesiumTwinViewport = forwardRef(function CesiumTwinViewport({
       )}
 
       {/* Fallback Setup Instructions & Interactive Token Modal */}
-      {tokenMissing && !useSchematicView && (
+      {tokenMissing && !useSchematicView && !isPiP && (
         <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="max-w-md w-full p-6 rounded-2xl bg-slate-900 border-2 border-amber-500/50 shadow-2xl text-white space-y-4">
             <div className="flex items-center gap-3 text-amber-400">
