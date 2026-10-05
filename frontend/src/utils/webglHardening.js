@@ -65,6 +65,23 @@ export function disposeThreeScene(scene, renderer) {
 }
 
 /**
+ * Safely checks whether WebGL is supported and available in the current browser/DOM environment.
+ *
+ * @param {HTMLCanvasElement} [testCanvas] - Optional canvas element to test against
+ * @returns {boolean} True if WebGL or WebGL2 context creation succeeds
+ */
+export function isWebGLAvailable(testCanvas) {
+  try {
+    const canvas = testCanvas || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
+    if (!canvas || typeof canvas.getContext !== 'function') return false;
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    return Boolean(gl && gl.getParameter);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Attaches webglcontextlost and webglcontextrestored event handlers to a canvas.
  *
  * @param {HTMLCanvasElement} canvas

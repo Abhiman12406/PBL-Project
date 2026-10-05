@@ -65,7 +65,8 @@ import CockpitHUD from './CockpitHUD';
 import {
   disposeThreeScene,
   setupContextLossHandlers,
-  shouldThrottleRender
+  shouldThrottleRender,
+  isWebGLAvailable
 } from '../utils/webglHardening.js';
 import { useGlobalKeyboardShortcuts } from '../utils/keyboardShortcuts.js';
 
@@ -136,6 +137,7 @@ export default function PersistentStage3D({ onSelectNode }) {
   const [hudMinimized, setHudMinimized] = useState(false);
   const [simSpeed, setSimSpeed] = useState(1);
   const [isPaused, setIsPaused] = useState(false);
+  const [webglError, setWebglError] = useState(null);
   const isContextLostRef = useRef(false);
 
 
@@ -256,6 +258,13 @@ export default function PersistentStage3D({ onSelectNode }) {
   useEffect(() => {
     if (!containerRef.current || !canvasRef.current) return;
 
+    // 0. Verify WebGL Context Availability in current browser runtime
+    if (!isWebGLAvailable(canvasRef.current)) {
+      console.warn('[PersistentStage3D] WebGL hardware acceleration unavailable. Engaging 2D tactical schematic mode.');
+      setWebglError('Hardware WebGL acceleration unavailable');
+      return;
+    }
+
     const width = containerRef.current.clientWidth || window.innerWidth;
     const height = containerRef.current.clientHeight || window.innerHeight;
 
@@ -273,19 +282,27 @@ export default function PersistentStage3D({ onSelectNode }) {
     dampedCamPosRef.current = [-20, 18, 38];
     dampedLookTargetRef.current = [0, 4, -8];
 
-    // 3. WebGL Renderer with High-Performance Config
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      antialias: true,
-      powerPreference: 'high-performance',
-      stencil: false,
-      depth: true
-    });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    rendererRef.current = renderer;
+    // 3. WebGL Renderer with High-Performance Config and Failure Protection
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvasRef.current,
+        antialias: true,
+        powerPreference: 'high-performance',
+        stencil: false,
+        depth: true
+      });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      rendererRef.current = renderer;
+    } catch (err) {
+      console.warn('[PersistentStage3D] WebGLRenderer creation failed:', err);
+      setWebglError(err?.message || 'WebGL context initialization failed');
+      disposeThreeScene(scene);
+      return;
+    }
 
     // 4. Lighting Suite: Steady Ambient + Cyber Ground Rims + Sun
     const ambientLight = new THREE.AmbientLight(0x0f172a, 2.4);
@@ -817,7 +834,9 @@ export default function PersistentStage3D({ onSelectNode }) {
       });
 
       // Render Scene
-      renderer.render(scene, camera);
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
     };
 
     // Setup WebGL Context Loss Handlers
@@ -856,10 +875,10 @@ export default function PersistentStage3D({ onSelectNode }) {
 
     return () => {
       window.removeEventListener('resize', updateSize);
-      ro.disconnect();
-      cleanupContextLoss();
+      if (ro) ro.disconnect();
+      if (typeof cleanupContextLoss === 'function') cleanupContextLoss();
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
-      disposeThreeScene(scene, renderer);
+      if (scene) disposeThreeScene(scene, renderer);
     };
   }, []);
 
@@ -1216,12 +1235,40 @@ export default function PersistentStage3D({ onSelectNode }) {
           </div>
         )}
 
-        {/* 3D WebGL Canvas */}
-        <canvas
-          ref={canvasRef}
-          onClick={isTacticalPrimary ? handleCanvasClick : () => setActiveStageEngine && setActiveStageEngine(STAGE_ENGINES.TACTICAL_3D)}
-          className="absolute inset-0 w-full h-full block cursor-grab active:cursor-grabbing"
-        />
+        {/* 3D WebGL Canvas or 2D Tactical Schematic Radar Fallback */}
+        {webglError ? (
+          <div className="absolute inset-0 w-full h-full bg-[#020617] flex flex-col items-center justify-center p-6 text-center select-none z-0 overflow-hidden">
+            {/* Ambient Tactical Grid Pattern */}
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a25_1px,transparent_1px),linear-gradient(to_bottom,#0f172a25_1px,transparent_1px)] bg-[size:3.5rem_3.5rem] pointer-events-none" />
+
+            <div className="relative z-10 max-w-md p-6 rounded-2xl cyber-glass border border-cyan-500/40 bg-slate-950/85 shadow-2xl backdrop-blur-xl">
+              <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mx-auto mb-3 text-cyan-400">
+                <Layers className="w-6 h-6 animate-pulse" />
+              </div>
+              <h3 className="text-base font-extrabold text-white mb-1.5 tracking-wide">
+                2D TACTICAL SCHEMATIC RADAR ACTIVE
+              </h3>
+              <p className="text-xs text-slate-400 mb-4 leading-relaxed font-sans">
+                Hardware WebGL context is unavailable in this environment ({webglError}). The digital twin has engaged resilient 2D tactical schematic mode. All dock service modules and telematics remain fully functional.
+              </p>
+              <div className="flex items-center justify-center gap-3 text-[11px] font-mono">
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-950/60 border border-emerald-700/60 text-emerald-400 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  CORRIDOR RADAR
+                </span>
+                <span className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-slate-300">
+                  6 HUBS MONITORED
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            onClick={isTacticalPrimary ? handleCanvasClick : () => setActiveStageEngine && setActiveStageEngine(STAGE_ENGINES.TACTICAL_3D)}
+            className="absolute inset-0 w-full h-full block cursor-grab active:cursor-grabbing"
+          />
+        )}
 
         {/* Atmospheric Vignette Overlay (Full-screen only) */}
         {isTacticalPrimary && (

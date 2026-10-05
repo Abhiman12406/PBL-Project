@@ -15,7 +15,8 @@ import { telemetryWS } from '../src/services/websocket.js';
 import {
   setupContextLossHandlers,
   shouldThrottleRender,
-  disposeThreeScene
+  disposeThreeScene,
+  isWebGLAvailable
 } from '../src/utils/webglHardening.js';
 import {
   dispatchKeyboardShortcut,
@@ -125,6 +126,22 @@ describe('06: End-to-End Hardening, Offline Fallback & Performance Verification'
         }),
         false
       );
+    });
+
+    test('isWebGLAvailable detects context availability or returns false gracefully without throwing', () => {
+      // Mock canvas with no webgl context
+      const noGlCanvas = { getContext: () => null };
+      assert.equal(isWebGLAvailable(noGlCanvas), false);
+
+      // Mock canvas with throwing getContext
+      const throwingCanvas = { getContext: () => { throw new Error('GPU context initialization exception'); } };
+      assert.equal(isWebGLAvailable(throwingCanvas), false);
+
+      // Mock canvas with valid webgl2 context
+      const validGlCanvas = {
+        getContext: (type) => (type === 'webgl2' ? { getParameter: () => 16 } : null)
+      };
+      assert.equal(isWebGLAvailable(validGlCanvas), true);
     });
 
     test('disposeThreeScene cleanly traverses scene, disposes geometries/materials, and cleans renderer without errors', () => {
