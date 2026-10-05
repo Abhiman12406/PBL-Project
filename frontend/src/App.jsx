@@ -1,20 +1,29 @@
 import React from 'react';
 import { PersonaProvider } from './context/PersonaContext';
-import Navbar from './components/Navbar';
-import DashboardShell from './components/DashboardShell';
+import { WorkspaceProvider } from './context/WorkspaceContext';
+import PersistentStage3D from './components/PersistentStage3D';
+import CyberStatusBar from './components/CyberStatusBar';
+import WindowManager from './components/WindowManager';
+import GlassDock from './components/GlassDock';
 
 function App() {
   return (
     <PersonaProvider>
-      <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-orange-500/20 selection:text-orange-950">
-        <Navbar />
-        <main className="flex-1 flex flex-col">
-          <DashboardShell />
-        </main>
-        <footer className="bg-white border-t-2 border-slate-200 px-6 py-4 text-center text-xs font-semibold text-slate-500">
-          Cognitive Software-Driven Smart Logistics & Autonomous Freight Platform
-        </footer>
-      </div>
+      <WorkspaceProvider>
+        <div className="relative w-screen h-screen overflow-hidden bg-[#020617] text-slate-100 font-sans select-none">
+          {/* 1. Persistent 3D Operational Stage (Continuous 60 FPS Three.js World) */}
+          <PersistentStage3D />
+
+          {/* 2. Cyber-Dark Translucent Status Header */}
+          <CyberStatusBar />
+
+          {/* 3. Floating Draggable Glassmorphic Service Panels */}
+          <WindowManager />
+
+          {/* 4. Floating Glassmorphic Dock Toolbar */}
+          <GlassDock />
+        </div>
+      </WorkspaceProvider>
     </PersonaProvider>
   );
 }
