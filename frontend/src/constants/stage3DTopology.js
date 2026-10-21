@@ -57,6 +57,17 @@ export const STAGE_NODES = [
   }
 ];
 
+export const PANVEL_DEPOT_NODE = {
+  id: 'DEP-PNV-01',
+  code: 'PANVEL',
+  name: 'Panvel Logistics Depot',
+  tier: 'Tier 2 Multimodal Siding',
+  pos: [-34, 0, 24],
+  color: '#06b6d4', // Cyan
+  iconName: 'Warehouse',
+  details: 'Multimodal rail-road interchange and container staging depot.'
+};
+
 export const PUNE_FC_NODE = {
   id: 'FC-PUN-01',
   code: 'PUNE',
@@ -71,6 +82,16 @@ export const PUNE_FC_NODE = {
 export const STAGE_FACILITIES = [
   ...STAGE_NODES,
   PUNE_FC_NODE
+];
+
+export const ALL_STAGE_FACILITIES = [
+  STAGE_NODES[0], // JNPT
+  PANVEL_DEPOT_NODE, // PANVEL
+  STAGE_NODES[1], // THANE
+  STAGE_NODES[2], // BHIWANDI
+  STAGE_NODES[3], // KASARA
+  STAGE_NODES[4], // NASHIK
+  PUNE_FC_NODE // PUNE
 ];
 
 export const CAMERA_VIEWS = {
@@ -88,6 +109,11 @@ export const CAMERA_VIEWS = {
     name: 'JNPT Maritime Port',
     position: [-36, 16, 50],
     target: [-44, 0, 32]
+  },
+  PANVEL_DEPOT: {
+    name: 'Panvel Logistics Depot',
+    position: [-24, 14, 40],
+    target: [-34, 0, 24]
   },
   BHIWANDI_DC: {
     name: 'Bhiwandi Mega DC',

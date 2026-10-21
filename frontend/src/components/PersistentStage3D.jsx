@@ -42,9 +42,15 @@ import { worldToWgs84Coordinates } from '../utils/coordinateTransforms';
 import {
   STAGE_NODES,
   STAGE_FACILITIES,
+  ALL_STAGE_FACILITIES,
+  PANVEL_DEPOT_NODE,
   CAMERA_VIEWS,
   PUNE_FC_NODE
 } from '../constants/stage3DTopology.js';
+import {
+  calculateNightGlowFactor,
+  updateEmissiveIntensity
+} from '../utils/modelLoader.js';
 import {
   CAMERA_MODES,
   CAMERA_MODE_METADATA,
@@ -75,6 +81,8 @@ import { useGlobalKeyboardShortcuts } from '../utils/keyboardShortcuts.js';
 export {
   STAGE_NODES,
   STAGE_FACILITIES,
+  ALL_STAGE_FACILITIES,
+  PANVEL_DEPOT_NODE,
   CAMERA_VIEWS,
   CAMERA_MODES,
   CAMERA_MODE_METADATA
@@ -161,6 +169,8 @@ export default function PersistentStage3D({ onSelectNode }) {
   const cameraModeRef = useRef(CAMERA_MODES.CHASE);
   const simSpeedRef = useRef(1);
   const isPausedRef = useRef(false);
+  const simStateRef = useRef(simState);
+  const lastNightFactorRef = useRef(-1);
 
   // Active Vehicle & Roadblock sync references
   const activeVehicleIdRef = useRef('TRK-MH-01');
@@ -243,6 +253,7 @@ export default function PersistentStage3D({ onSelectNode }) {
 
   useEffect(() => {
     if (simState) {
+      simStateRef.current = simState;
       simSpeedRef.current = simState.speed_multiplier || 1.0;
       isPausedRef.current = !simState.is_running;
       setSimSpeed(simState.speed_multiplier || 1.0);
@@ -463,9 +474,10 @@ export default function PersistentStage3D({ onSelectNode }) {
     // 13. 3D Volumetric Demand Heatmap Pillars (Over Corridor Facilities)
     const demandHeatmapGroup = new THREE.Group();
     demandHeatmapGroup.name = 'VolumetricDemandHeatmapOverlays';
-    STAGE_FACILITIES.forEach((facility) => {
+    ALL_STAGE_FACILITIES.forEach((facility) => {
       const defaultDemands = {
         'PORT-JNPT-01': 4800,
+        'DEP-PNV-01': 3200,
         'DC-BHW-01': 4200,
         'HUB-THN-01': 2100,
         'PASS-KASARA-01': 800,
@@ -622,6 +634,31 @@ export default function PersistentStage3D({ onSelectNode }) {
           r.mesh.material.color.setHex(0x00e5ff); // High-intensity cyan aura
         }
       });
+
+      // Synchronize facility material emissive night-glow with simulation clock
+      const currentSimTime = simStateRef.current?.simulated_time ?? '08:00:00 AM';
+      const nightFactor = calculateNightGlowFactor(currentSimTime);
+      const intensityMultiplier = 0.2 + 1.2 * nightFactor;
+
+      if (Math.abs(lastNightFactorRef.current - nightFactor) > 0.005) {
+        lastNightFactorRef.current = nightFactor;
+        if (facilitiesMapRef.current) {
+          Object.values(facilitiesMapRef.current).forEach((fac) => {
+            if (fac.emissiveMaterials && fac.emissiveMaterials.length > 0) {
+              fac.emissiveMaterials.forEach((mat) => {
+                if (mat.userData.baseEmissiveIntensity === undefined) {
+                  mat.userData.baseEmissiveIntensity = (mat.emissiveIntensity !== undefined && mat.emissiveIntensity > 0)
+                    ? mat.emissiveIntensity
+                    : 0.6;
+                }
+                mat.emissiveIntensity = mat.userData.baseEmissiveIntensity * intensityMultiplier;
+              });
+            } else if (fac.model) {
+              updateEmissiveIntensity(fac.model, nightFactor);
+            }
+          });
+        }
+      }
 
       // Check Roadblock and Incident status at Kasara Ghat
       const isBlocked = (activeRoadblocksRef.current || []).some(
@@ -958,7 +995,7 @@ export default function PersistentStage3D({ onSelectNode }) {
     const { type, id } = flyToTarget;
 
     if (type === 'facility') {
-      const found = STAGE_FACILITIES.find((f) => f.id === id || f.code === id);
+      const found = ALL_STAGE_FACILITIES.find((f) => f.id === id || f.code === id) || STAGE_FACILITIES.find((f) => f.id === id || f.code === id);
       if (found) {
         setSelectedNode(found);
         glideCameraTo(
@@ -1160,7 +1197,7 @@ export default function PersistentStage3D({ onSelectNode }) {
     const facilityHit = intersects.find((i) => i.object.userData && i.object.userData.isFacility);
     if (facilityHit) {
       const nodeId = facilityHit.object.userData.nodeId;
-      const foundNode = STAGE_FACILITIES.find((n) => n.id === nodeId);
+      const foundNode = ALL_STAGE_FACILITIES.find((n) => n.id === nodeId) || STAGE_FACILITIES.find((n) => n.id === nodeId);
       if (foundNode) {
         setSelectedNode(foundNode);
         if (selectFacility) {

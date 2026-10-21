@@ -4,11 +4,11 @@
 
 **Blocked by:** 04 (Generation & Asset Delivery of the 6 Corridor Hub Models)
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] A cached singleton loader utility `frontend/src/utils/modelLoader.js` is created to load, cache, and clone `.glb` scenes efficiently without duplicate network fetches.
-- [ ] `createCorridorLogisticsNodes` in `proceduralWorld.js` loads the 6 GLB models asynchronously and mounts them at their spatial world positions (`JNPT`, `Panvel`, `Thane`, `Bhiwandi`, `Nashik`, `Pune`).
-- [ ] Procedural facility models remain as instant fallbacks while GLB models stream or if an asset fails to load.
-- [ ] Kasara Ghat continues to render its dedicated procedural mountain elevation pass (`createKasaraElevationTerrain`).
-- [ ] Holographic vertical light beams (`CylinderGeometry`), pulsing status rings (`RingGeometry`), and click-to-select raycasting remain functional on the loaded GLB meshes.
-- [ ] Material emissive intensity dynamically modulates based on the simulation time (illuminating windows and conduits during night hours).
+- [x] A cached singleton loader utility `frontend/src/utils/modelLoader.js` is created to load, cache, and clone `.glb` scenes efficiently without duplicate network fetches.
+- [x] `createCorridorLogisticsNodes` in `proceduralWorld.js` loads the 6 GLB models asynchronously and mounts them at their spatial world positions (`JNPT`, `Panvel`, `Thane`, `Bhiwandi`, `Nashik`, `Pune`).
+- [x] Procedural facility models remain as instant fallbacks while GLB models stream or if an asset fails to load.
+- [x] Kasara Ghat continues to render its dedicated procedural mountain elevation pass (`createKasaraElevationTerrain`).
+- [x] Holographic vertical light beams (`CylinderGeometry`), pulsing status rings (`RingGeometry`), and click-to-select raycasting remain functional on the loaded GLB meshes.
+- [x] Material emissive intensity dynamically modulates based on the simulation time (illuminating windows and conduits during night hours).

@@ -11,7 +11,7 @@
  */
 
 import { wgs84ToWorldCoordinates, worldToWgs84Coordinates } from './coordinateTransforms.js';
-import { STAGE_NODES, STAGE_FACILITIES, PUNE_FC_NODE } from '../constants/stage3DTopology.js';
+import { STAGE_NODES, STAGE_FACILITIES, ALL_STAGE_FACILITIES, PANVEL_DEPOT_NODE, PUNE_FC_NODE } from '../constants/stage3DTopology.js';
 import { FACILITY_NODES, CAMERA_PRESETS, SCHEMATIC_COORDS } from '../constants/logisticsTopology.js';
 
 export const STAGE_ENGINES = {
@@ -89,7 +89,7 @@ export function mapFacilityBetweenEngines(identifier) {
   const clean = String(identifier).toUpperCase().trim();
 
   // 1. Direct ID match
-  let stageNode = STAGE_FACILITIES.find((n) => n.id.toUpperCase() === clean || n.code.toUpperCase() === clean);
+  let stageNode = (ALL_STAGE_FACILITIES || STAGE_FACILITIES).find((n) => n.id.toUpperCase() === clean || n.code.toUpperCase() === clean);
   let cesiumNode = FACILITY_NODES.find((n) => n.node_id.toUpperCase() === clean || n.shortName.toUpperCase() === clean);
 
   // 2. Special aliases for Kasara Ghat
@@ -111,7 +111,12 @@ export function mapFacilityBetweenEngines(identifier) {
     };
   }
 
-  // 3. Pune Fulfillment Center fallback
+  // 3. Panvel Logistics Depot fallback
+  if (!stageNode && (clean.includes('PANVEL') || clean.includes('PNV'))) {
+    stageNode = PANVEL_DEPOT_NODE;
+  }
+
+  // 4. Pune Fulfillment Center fallback
   if (!stageNode && (clean.includes('PUN') || clean === 'FC-PUN-01')) {
     stageNode = PUNE_FC_NODE;
   }
@@ -124,9 +129,11 @@ export function mapFacilityBetweenEngines(identifier) {
   // Derive preset key
   let presetKey = 'CORRIDOR_OVERVIEW';
   if (clean.includes('JNPT')) presetKey = 'JNPT_PORT';
+  else if (clean.includes('PANVEL') || clean.includes('PNV')) presetKey = 'PANVEL_DEPOT';
   else if (clean.includes('BHW') || clean.includes('BHIWANDI')) presetKey = 'BHIWANDI_DC';
   else if (clean.includes('KASARA')) presetKey = 'KASARA_PASS';
   else if (clean.includes('NSK') || clean.includes('NASHIK')) presetKey = 'NASHIK_DEPOT';
+  else if (clean.includes('PUN')) presetKey = 'PUNE_FC';
   else if (clean.includes('THN') || clean.includes('THANE')) presetKey = 'OVERVIEW';
 
   return {
