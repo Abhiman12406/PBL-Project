@@ -137,11 +137,12 @@ export function createExtrudedHighwayRibbon(curve, {
   rightShoulder.position.set(shoulderOffset * 0.4, roadWidth * 0.9, shoulderOffset * 0.4);
   roadGroup.add(rightShoulder);
 
-  // Attach reference properties for route glowing
+  // Attach reference properties for route glowing and night mode
   roadGroup.centerLaneMesh = centerLaneMesh;
   roadGroup.centerLaneMat = centerLaneMat;
   roadGroup.leftShoulder = leftShoulder;
   roadGroup.rightShoulder = rightShoulder;
+  roadGroup.shoulderMat = shoulderMat;
 
   return roadGroup;
 }
@@ -262,6 +263,7 @@ export function createCorridorLogisticsNodes(onSelectNode, facilities = ALL_STAG
     });
     const beam = new THREE.Mesh(beamGeo, beamMat);
     beam.position.set(node.pos[0], node.pos[1] + 9, node.pos[2]);
+    beam.userData = { isFacility: true, nodeId: node.id, code: node.code, name: node.name };
     group.add(beam);
 
     // 3. Pulsing Ground Ring Indicator
@@ -275,6 +277,7 @@ export function createCorridorLogisticsNodes(onSelectNode, facilities = ALL_STAG
     const ringMesh = new THREE.Mesh(ringGeo, ringMat);
     ringMesh.rotation.x = -Math.PI / 2;
     ringMesh.position.set(node.pos[0], node.pos[1] + 0.08, node.pos[2]);
+    ringMesh.userData = { isFacility: true, nodeId: node.id, code: node.code, name: node.name };
     group.add(ringMesh);
 
     rings.push({ mesh: ringMesh, scale: 1, nodeId: node.id });

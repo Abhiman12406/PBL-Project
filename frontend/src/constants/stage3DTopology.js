@@ -115,6 +115,11 @@ export const CAMERA_VIEWS = {
     position: [-24, 14, 40],
     target: [-34, 0, 24]
   },
+  THANE_HUB: {
+    name: 'Thane Regional Hub',
+    position: [-14, 14, 32],
+    target: [-24, 0, 16]
+  },
   BHIWANDI_DC: {
     name: 'Bhiwandi Mega DC',
     position: [-6, 14, 20],

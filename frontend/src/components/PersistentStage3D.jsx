@@ -27,7 +27,9 @@ import {
   Rotate3d,
   Crosshair,
   Globe,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext.jsx';
 import CesiumTwinViewport from './CesiumTwinViewport';
@@ -140,15 +142,15 @@ export default function PersistentStage3D({ onSelectNode }) {
   }, [setWorkspaceCameraMode]);
 
   const [activeCamView, setActiveCamView] = useState('CHASE');
-  const [hoveredNode, setHoveredNode] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
-  const [cameraCoords, setCameraCoords] = useState({ x: 0, y: 15, z: 20 });
   const [hudMinimized, setHudMinimized] = useState(false);
   const [simSpeed, setSimSpeed] = useState(1);
   const [isPaused, setIsPaused] = useState(false);
+  const [nightModeOverride, setNightModeOverride] = useState(null);
   const [webglError, setWebglError] = useState(null);
   const isContextLostRef = useRef(false);
-
+  const nightModeOverrideRef = useRef(null);
+  const mouseDragStartRef = useRef({ x: 0, y: 0 });
 
   // Synchronized Vehicle WGS84 GPS State
   const [vehicleGps, setVehicleGps] = useState({
@@ -166,6 +168,11 @@ export default function PersistentStage3D({ onSelectNode }) {
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
   const rendererRef = useRef(null);
+  const ambientLightRef = useRef(null);
+  const sunLightRef = useRef(null);
+  const cyanRimRef = useRef(null);
+  const orangeRimRef = useRef(null);
+  const glideAnimRef = useRef(null);
   const cameraModeRef = useRef(CAMERA_MODES.CHASE);
   const simSpeedRef = useRef(1);
   const isPausedRef = useRef(false);
@@ -252,14 +259,30 @@ export default function PersistentStage3D({ onSelectNode }) {
   }, [activeRoadblocks]);
 
   useEffect(() => {
+    nightModeOverrideRef.current = nightModeOverride;
+  }, [nightModeOverride]);
+
+  useEffect(() => {
     if (simState) {
       simStateRef.current = simState;
+      if (simState.is_night !== undefined && nightModeOverrideRef.current === null) {
+        setNightModeOverride(Boolean(simState.is_night));
+      }
       simSpeedRef.current = simState.speed_multiplier || 1.0;
       isPausedRef.current = !simState.is_running;
       setSimSpeed(simState.speed_multiplier || 1.0);
       setIsPaused(!simState.is_running);
     }
   }, [simState]);
+
+  useEffect(() => {
+    if (!selectedFacilityId) return;
+    const found = ALL_STAGE_FACILITIES.find((f) => f.id === selectedFacilityId || f.code === selectedFacilityId) ||
+                  STAGE_FACILITIES.find((f) => f.id === selectedFacilityId || f.code === selectedFacilityId);
+    if (found) {
+      setSelectedNode(found);
+    }
+  }, [selectedFacilityId]);
 
   useEffect(() => {
     cameraModeRef.current = effectiveCameraMode;
@@ -324,6 +347,7 @@ export default function PersistentStage3D({ onSelectNode }) {
     // 4. Lighting Suite: Steady Ambient + Cyber Ground Rims + Sun
     const ambientLight = new THREE.AmbientLight(0x0f172a, 2.4);
     scene.add(ambientLight);
+    ambientLightRef.current = ambientLight;
 
     const sunLight = new THREE.DirectionalLight(0xe2e8f0, 2.6);
     sunLight.position.set(50, 75, 45);
@@ -337,15 +361,18 @@ export default function PersistentStage3D({ onSelectNode }) {
     sunLight.shadow.camera.top = 70;
     sunLight.shadow.camera.bottom = -70;
     scene.add(sunLight);
+    sunLightRef.current = sunLight;
 
     // Neon Cyber Ground Bounce Lights
     const cyanRim = new THREE.DirectionalLight(0x06b6d4, 1.8);
     cyanRim.position.set(-60, -10, -60);
     scene.add(cyanRim);
+    cyanRimRef.current = cyanRim;
 
     const orangeRim = new THREE.DirectionalLight(0xff5400, 1.5);
     orangeRim.position.set(60, -5, 60);
     scene.add(orangeRim);
+    orangeRimRef.current = orangeRim;
 
     // 5. Ground Coordinate Spatial Grid
     const gridHelper = new THREE.GridHelper(300, 60, 0x0284c7, 0x1e293b);
@@ -635,13 +662,36 @@ export default function PersistentStage3D({ onSelectNode }) {
         }
       });
 
-      // Synchronize facility material emissive night-glow with simulation clock
+      // Synchronize facility material emissive night-glow & ambient illumination with simulation clock / night toggle
       const currentSimTime = simStateRef.current?.simulated_time ?? '08:00:00 AM';
-      const nightFactor = calculateNightGlowFactor(currentSimTime);
+      const clockNightFactor = calculateNightGlowFactor(currentSimTime);
+      const isNightActive = nightModeOverrideRef.current !== null
+        ? nightModeOverrideRef.current
+        : (simStateRef.current?.is_night !== undefined ? Boolean(simStateRef.current.is_night) : clockNightFactor > 0.5);
+      const nightFactor = nightModeOverrideRef.current !== null
+        ? (nightModeOverrideRef.current ? 1.0 : 0.0)
+        : (simStateRef.current?.is_night ? 1.0 : clockNightFactor);
       const intensityMultiplier = 0.2 + 1.2 * nightFactor;
 
       if (Math.abs(lastNightFactorRef.current - nightFactor) > 0.005) {
         lastNightFactorRef.current = nightFactor;
+
+        // 1. Shift ambient illumination and sun lighting
+        if (ambientLightRef.current) {
+          ambientLightRef.current.intensity = 2.4 - 1.65 * nightFactor;
+        }
+        if (sunLightRef.current) {
+          sunLightRef.current.intensity = 2.6 - 2.2 * nightFactor;
+          sunLightRef.current.color.setHex(nightFactor > 0.5 ? 0x93c5fd : 0xe2e8f0);
+        }
+        if (cyanRimRef.current) {
+          cyanRimRef.current.intensity = 1.2 + 1.4 * nightFactor;
+        }
+        if (orangeRimRef.current) {
+          orangeRimRef.current.intensity = 1.0 + 1.2 * nightFactor;
+        }
+
+        // 2. Modulate emissive window and building materials across all 6 hubs
         if (facilitiesMapRef.current) {
           Object.values(facilitiesMapRef.current).forEach((fac) => {
             if (fac.emissiveMaterials && fac.emissiveMaterials.length > 0) {
@@ -655,6 +705,20 @@ export default function PersistentStage3D({ onSelectNode }) {
               });
             } else if (fac.model) {
               updateEmissiveIntensity(fac.model, nightFactor);
+            }
+          });
+        }
+
+        // 3. Modulate highway conduits luminosity across corridor routes
+        if (highwayRibbonsRef.current) {
+          Object.values(highwayRibbonsRef.current).forEach((ribbon) => {
+            if (ribbon) {
+              if (ribbon.shoulderMat) {
+                ribbon.shoulderMat.opacity = 0.55 + 0.4 * nightFactor;
+              }
+              if (ribbon.centerLaneMat) {
+                ribbon.centerLaneMat.opacity = 0.75 + 0.25 * nightFactor;
+              }
             }
           });
         }
@@ -880,12 +944,6 @@ export default function PersistentStage3D({ onSelectNode }) {
         camera.lookAt(orbitStateRef.current.target);
       }
 
-      setCameraCoords({
-        x: Math.round(camera.position.x),
-        y: Math.round(camera.position.y),
-        z: Math.round(camera.position.z)
-      });
-
       // Render Scene
       if (renderer && scene && camera) {
         renderer.render(scene, camera);
@@ -931,6 +989,7 @@ export default function PersistentStage3D({ onSelectNode }) {
       if (ro) ro.disconnect();
       if (typeof cleanupContextLoss === 'function') cleanupContextLoss();
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+      if (glideAnimRef.current) cancelAnimationFrame(glideAnimRef.current);
       if (scene) disposeThreeScene(scene, renderer);
     };
   }, []);
@@ -949,11 +1008,20 @@ export default function PersistentStage3D({ onSelectNode }) {
   // Glides camera smoothly to preset target in Free Orbit mode
   const glideCameraTo = useCallback((targetPos, lookAtTarget) => {
     if (!cameraRef.current) return;
-    setCameraMode(CAMERA_MODES.FREE_ORBIT);
+    if (glideAnimRef.current) {
+      cancelAnimationFrame(glideAnimRef.current);
+      glideAnimRef.current = null;
+    }
+
+    setEffectiveCameraMode(CAMERA_MODES.FREE_ORBIT);
+    cameraModeRef.current = CAMERA_MODES.FREE_ORBIT;
+
     const camera = cameraRef.current;
     const startPos = camera.position.clone();
     const endPos = new THREE.Vector3(...targetPos);
-    orbitStateRef.current.target.set(...lookAtTarget);
+    const startTarget = orbitStateRef.current.target.clone();
+    const endTarget = new THREE.Vector3(...lookAtTarget);
+    const currentTarget = new THREE.Vector3();
 
     const startTime = performance.now();
     const duration = 1200;
@@ -964,15 +1032,23 @@ export default function PersistentStage3D({ onSelectNode }) {
       const t = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 
       camera.position.lerpVectors(startPos, endPos, t);
-      camera.lookAt(orbitStateRef.current.target);
+      currentTarget.lerpVectors(startTarget, endTarget, t);
+      orbitStateRef.current.target.copy(currentTarget);
+      camera.lookAt(currentTarget);
 
       if (progress < 1) {
-        requestAnimationFrame(animateGlide);
+        glideAnimRef.current = requestAnimationFrame(animateGlide);
+      } else {
+        orbitStateRef.current.target.copy(endTarget);
+        camera.lookAt(endTarget);
+        dampedCamPosRef.current = [endPos.x, endPos.y, endPos.z];
+        dampedLookTargetRef.current = [endTarget.x, endTarget.y, endTarget.z];
+        glideAnimRef.current = null;
       }
     };
 
-    requestAnimationFrame(animateGlide);
-  }, []);
+    glideAnimRef.current = requestAnimationFrame(animateGlide);
+  }, [setEffectiveCameraMode]);
 
   // Facility selection synchronized from Macro Cesium GIS
   const handleSelectFacilityFromCesium = useCallback((nodeId) => {
@@ -981,10 +1057,15 @@ export default function PersistentStage3D({ onSelectNode }) {
     const mapped = mapFacilityBetweenEngines(nodeId);
     if (mapped.stageNode) {
       setSelectedNode(mapped.stageNode);
-      glideCameraTo(
-        [mapped.stageNode.pos[0] + 18, mapped.stageNode.pos[1] + 15, mapped.stageNode.pos[2] + 22],
-        mapped.stageNode.pos
-      );
+      const preset = mapped.presetKey && CAMERA_VIEWS[mapped.presetKey];
+      if (preset) {
+        glideCameraTo(preset.position, preset.target);
+      } else {
+        glideCameraTo(
+          [mapped.stageNode.pos[0] + 18, mapped.stageNode.pos[1] + 15, mapped.stageNode.pos[2] + 22],
+          mapped.stageNode.pos
+        );
+      }
     }
     if (onSelectNode) onSelectNode(nodeId);
   }, [glideCameraTo, onSelectNode, setSelectedFacilityId]);
@@ -998,10 +1079,16 @@ export default function PersistentStage3D({ onSelectNode }) {
       const found = ALL_STAGE_FACILITIES.find((f) => f.id === id || f.code === id) || STAGE_FACILITIES.find((f) => f.id === id || f.code === id);
       if (found) {
         setSelectedNode(found);
-        glideCameraTo(
-          [found.pos[0] + 18, found.pos[1] + 15, found.pos[2] + 22],
-          found.pos
-        );
+        const mapped = mapFacilityBetweenEngines(found.id || found.code);
+        const preset = mapped.presetKey && CAMERA_VIEWS[mapped.presetKey];
+        if (preset) {
+          glideCameraTo(preset.position, preset.target);
+        } else {
+          glideCameraTo(
+            [found.pos[0] + 18, found.pos[1] + 15, found.pos[2] + 22],
+            found.pos
+          );
+        }
       }
     } else if (type === 'route') {
       if (id === 'main_corridor' || id === 'LINK-BHW-NSK') {
@@ -1052,11 +1139,21 @@ export default function PersistentStage3D({ onSelectNode }) {
 
   // Select camera view preset
   const handleSelectView = (presetKey) => {
-    const preset = CAMERA_VIEWS[presetKey];
+    const preset = CAMERA_VIEWS[presetKey] || (presetKey === 'CORRIDOR_OVERVIEW' ? CAMERA_VIEWS.OVERVIEW : null);
     if (!preset) return;
     setActiveCamView(presetKey);
     glideCameraTo(preset.position, preset.target);
     const mapped = mapFacilityBetweenEngines(presetKey);
+    if (mapped.stageNode) {
+      setSelectedNode(mapped.stageNode);
+      if (selectFacility) {
+        selectFacility(mapped.stageNode.id);
+      } else if (setSelectedFacilityId) {
+        setSelectedFacilityId(mapped.stageNode.id);
+      }
+    } else if (presetKey === 'OVERVIEW' || presetKey === 'CORRIDOR_OVERVIEW') {
+      setSelectedNode(null);
+    }
     if (mapped.cesiumNode && setSelectedFacilityId) {
       setSelectedFacilityId(mapped.cesiumNode.node_id);
     }
@@ -1065,6 +1162,13 @@ export default function PersistentStage3D({ onSelectNode }) {
   // Mouse Drag Handlers: supports Free-Look in Chase mode, Orbit/Pan in Free Orbit mode
   const handleMouseDown = (e) => {
     if (e.target !== canvasRef.current) return;
+    mouseDragStartRef.current = { x: e.clientX, y: e.clientY };
+
+    // Cancel in-progress camera glide if user grabs mouse to orbit or look around
+    if (glideAnimRef.current) {
+      cancelAnimationFrame(glideAnimRef.current);
+      glideAnimRef.current = null;
+    }
 
     if (cameraMode === CAMERA_MODES.CHASE) {
       freeLookRef.current.isDragging = true;
@@ -1154,6 +1258,13 @@ export default function PersistentStage3D({ onSelectNode }) {
   // Raycasting click to inspect 3D logistics node beacons, vehicles, and roadblocks
   const handleCanvasClick = (e) => {
     if (!canvasRef.current || !cameraRef.current || !sceneRef.current) return;
+    // Disambiguate click from drag: ignore if mouse moved > 6px
+    const dragDist = Math.hypot(
+      e.clientX - mouseDragStartRef.current.x,
+      e.clientY - mouseDragStartRef.current.y
+    );
+    if (dragDist > 6) return;
+
     const rect = canvasRef.current.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -1205,10 +1316,16 @@ export default function PersistentStage3D({ onSelectNode }) {
         } else if (setSelectedFacilityId) {
           setSelectedFacilityId(foundNode.id);
         }
-        glideCameraTo(
-          [foundNode.pos[0] + 18, foundNode.pos[1] + 15, foundNode.pos[2] + 22],
-          foundNode.pos
-        );
+        const mapped = mapFacilityBetweenEngines(foundNode.id);
+        const preset = mapped.presetKey && CAMERA_VIEWS[mapped.presetKey];
+        if (preset) {
+          glideCameraTo(preset.position, preset.target);
+        } else {
+          glideCameraTo(
+            [foundNode.pos[0] + 18, foundNode.pos[1] + 15, foundNode.pos[2] + 22],
+            foundNode.pos
+          );
+        }
         if (onSelectNode) onSelectNode(nodeId);
       }
       return;
@@ -1345,6 +1462,34 @@ export default function PersistentStage3D({ onSelectNode }) {
               <span className="text-xs font-mono text-cyan-400 font-bold">
                 {CAMERA_MODE_METADATA[cameraMode]?.badge}
               </span>
+              <span className="text-slate-600">|</span>
+              <button
+                type="button"
+                onClick={() => setNightModeOverride((prev) => {
+                  const currentSimTime = simStateRef.current?.simulated_time ?? '08:00:00 AM';
+                  const clockFactor = calculateNightGlowFactor(currentSimTime);
+                  const currentlyNight = prev !== null ? prev : (simStateRef.current?.is_night ? true : clockFactor > 0.5);
+                  return !currentlyNight;
+                })}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold transition ${
+                  (nightModeOverride !== null ? nightModeOverride : (simState?.is_night || calculateNightGlowFactor(simState?.simulated_time ?? '08:00:00 AM') > 0.5))
+                    ? 'bg-indigo-500/30 text-indigo-300 border border-indigo-400/50 shadow-sm'
+                    : 'text-slate-400 hover:text-amber-300 hover:bg-slate-800/80 border border-slate-700/60'
+                }`}
+                title="Toggle Day/Night Simulation (shifts ambient illumination & activates emissive windows)"
+              >
+                {(nightModeOverride !== null ? nightModeOverride : (simState?.is_night || calculateNightGlowFactor(simState?.simulated_time ?? '08:00:00 AM') > 0.5)) ? (
+                  <>
+                    <Moon className="w-3 h-3 text-indigo-400" />
+                    <span>NIGHT</span>
+                  </>
+                ) : (
+                  <>
+                    <Sun className="w-3 h-3 text-amber-400" />
+                    <span>DAY</span>
+                  </>
+                )}
+              </button>
               <button
                 onClick={() => setHudMinimized(!hudMinimized)}
                 className="text-slate-400 hover:text-white p-1 rounded transition ml-1"

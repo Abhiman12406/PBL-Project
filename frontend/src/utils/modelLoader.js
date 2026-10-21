@@ -55,6 +55,55 @@ export function clearModelCache() {
 }
 
 /**
+ * Disposes all cached GLTF scenes, geometries, materials, and textures,
+ * then clears the memory cache.
+ */
+export function disposeCachedModels() {
+  modelCache.forEach((entry) => {
+    const scene = entry?.scene;
+    if (scene) {
+      scene.traverse((obj) => {
+        if (obj.geometry && typeof obj.geometry.dispose === 'function') {
+          obj.geometry.dispose();
+        }
+        if (obj.material) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((m) => {
+            if (!m) return;
+            const texKeys = [
+              'map',
+              'emissiveMap',
+              'lightMap',
+              'aoMap',
+              'bumpMap',
+              'normalMap',
+              'displacementMap',
+              'roughnessMap',
+              'metalnessMap',
+              'alphaMap',
+              'specularMap',
+              'envMap',
+              'clearcoatMap',
+              'transmissionMap'
+            ];
+            texKeys.forEach((k) => {
+              if (m[k] && typeof m[k].dispose === 'function') {
+                m[k].dispose();
+              }
+            });
+            if (typeof m.dispose === 'function') {
+              m.dispose();
+            }
+          });
+        }
+      });
+    }
+  });
+  modelCache.clear();
+  loadingPromises.clear();
+}
+
+/**
  * Checks whether a model URL is currently cached in memory.
  *
  * @param {string} url

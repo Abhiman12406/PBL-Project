@@ -16,28 +16,62 @@
 export function disposeThreeScene(scene, renderer) {
   if (!scene) return;
 
+  const disposedGeometries = new Set();
+  const disposedMaterials = new Set();
+  const disposedTextures = new Set();
+
   scene.traverse((object) => {
-    // 1. Dispose Geometry
-    if (object.geometry && typeof object.geometry.dispose === 'function') {
-      object.geometry.dispose();
+    // 1. Dispose Geometry (deduplicated)
+    if (object.geometry && !disposedGeometries.has(object.geometry)) {
+      disposedGeometries.add(object.geometry);
+      if (typeof object.geometry.dispose === 'function') {
+        object.geometry.dispose();
+      }
     }
 
-    // 2. Dispose Materials and associated textures
+    // 2. Dispose Materials and associated textures (deduplicated)
     if (object.material) {
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       materials.forEach((mat) => {
-        if (!mat) return;
-        // Dispose textures attached to material
-        const textureKeys = ['map', 'lightMap', 'bumpMap', 'normalMap', 'specularMap', 'envMap', 'alphaMap', 'roughnessMap', 'metalnessMap'];
+        if (!mat || disposedMaterials.has(mat)) return;
+        disposedMaterials.add(mat);
+        // Dispose textures attached to material comprehensively
+        const textureKeys = [
+          'map',
+          'emissiveMap',
+          'lightMap',
+          'aoMap',
+          'bumpMap',
+          'normalMap',
+          'displacementMap',
+          'roughnessMap',
+          'metalnessMap',
+          'alphaMap',
+          'specularMap',
+          'envMap',
+          'clearcoatMap',
+          'transmissionMap'
+        ];
         textureKeys.forEach((key) => {
-          if (mat[key] && typeof mat[key].dispose === 'function') {
-            mat[key].dispose();
+          const tex = mat[key];
+          if (tex && !disposedTextures.has(tex)) {
+            disposedTextures.add(tex);
+            if (typeof tex.dispose === 'function') {
+              tex.dispose();
+            }
           }
         });
         if (typeof mat.dispose === 'function') {
           mat.dispose();
         }
       });
+    }
+
+    // 3. Dispose shadow map render targets on lights
+    if (object.isLight && object.shadow && object.shadow.map) {
+      if (typeof object.shadow.map.dispose === 'function') {
+        object.shadow.map.dispose();
+      }
     }
   });
 
@@ -55,6 +89,52 @@ export function disposeThreeScene(scene, renderer) {
       renderer.dispose();
     }
   }
+}
+
+/**
+ * Captures current WebGL memory telemetry metrics from the active renderer.
+ *
+ * @param {import('three').WebGLRenderer} renderer
+ * @returns {{
+ *   geometries: number,
+ *   textures: number,
+ *   renderCalls: number,
+ *   triangles: number,
+ *   frame: number
+ * }}
+ */
+export function profileWebGLMemory(renderer) {
+  if (!renderer || !renderer.info) {
+    return {
+      geometries: 0,
+      textures: 0,
+      renderCalls: 0,
+      triangles: 0,
+      frame: 0
+    };
+  }
+  return {
+    geometries: renderer.info.memory?.geometries ?? 0,
+    textures: renderer.info.memory?.textures ?? 0,
+    renderCalls: renderer.info.render?.calls ?? 0,
+    triangles: renderer.info.render?.triangles ?? 0,
+    frame: renderer.info.render?.frame ?? 0
+  };
+}
+
+/**
+ * Validates that scene disposal cleanly releases all GPU geometries and textures.
+ *
+ * @param {import('three').WebGLRenderer} renderer
+ * @returns {{ isClean: boolean, remainingGeometries: number, remainingTextures: number }}
+ */
+export function verifyDisposalMemoryState(renderer) {
+  const profile = profileWebGLMemory(renderer);
+  return {
+    isClean: profile.geometries === 0 && profile.textures === 0,
+    remainingGeometries: profile.geometries,
+    remainingTextures: profile.textures
+  };
 }
 
 /**
