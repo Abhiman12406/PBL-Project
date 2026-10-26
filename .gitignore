@@ -30,3 +30,9 @@ redisdata/
 .vscode/
 *.swp
 Thumbs.db
+
+# Test captures & scratch binaries
+.scratch/screenshots/
+.scratch/*.png
+.scratch/*.json
+

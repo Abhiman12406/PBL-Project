@@ -226,7 +226,7 @@ export default function DashboardShell() {
                   </div>
 
                   {/* Card 2: On-Time SLA (Signal Emerald) */}
-                  <div className="bright-card bright-card-hover p-5 rounded-2xl border-t-4 border-t-[#00C853] bg-white">
+                  <div className="bright-card bright-card-hover p-5 rounded-2xl border-t-4 border-t-[#10b981] bg-white">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                         On-Time SLA Delivery
@@ -246,8 +246,8 @@ export default function DashboardShell() {
                     </span>
                   </div>
 
-                  {/* Card 3: Forecast Error (Solar Yellow) */}
-                  <div className="bright-card bright-card-hover p-5 rounded-2xl border-t-4 border-t-[#FFB703] bg-white">
+                  {/* Card 3: Forecast Error (Solar Amber) */}
+                  <div className="bright-card bright-card-hover p-5 rounded-2xl border-t-4 border-t-[#f59e0b] bg-white">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                         Forecast Error (WAPE)
@@ -267,8 +267,8 @@ export default function DashboardShell() {
                     </span>
                   </div>
 
-                  {/* Card 4: Active Transit (Vivid Coral) */}
-                  <div className="bright-card bright-card-hover p-5 rounded-2xl border-t-4 border-t-[#FF1744] bg-white">
+                  {/* Card 4: Active Transit (Hazard Coral) */}
+                  <div className="bright-card bright-card-hover p-5 rounded-2xl border-t-4 border-t-[#f43f5e] bg-white">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                         Active Transit Fleets
@@ -445,10 +445,10 @@ export default function DashboardShell() {
                   </div>
 
                   {/* AI SDK / Gemini Card */}
-                  <div className="bright-card p-4 rounded-xl bg-white border-t-4 border-t-purple-500">
+                  <div className="bright-card p-4 rounded-xl bg-white border-t-4 border-t-violet-500">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-500">AI Document Engine</span>
-                      <Cpu className="w-4 h-4 text-purple-600" />
+                      <Cpu className="w-4 h-4 text-violet-600" />
                     </div>
                     <div className="mt-2">
                       <div className="flex items-baseline gap-2">
