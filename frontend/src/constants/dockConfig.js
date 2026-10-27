@@ -22,8 +22,8 @@ export const DOCK_SERVICES = [
     label: 'Demand Forecasting',
     shortLabel: 'Forecast',
     viewRequired: 'forecasting',
-    themeColor: '#ffb703', // Solar Yellow
-    accentGlow: 'rgba(255, 183, 3, 0.4)',
+    themeColor: '#f59e0b', // Solar Amber
+    accentGlow: 'rgba(245, 158, 11, 0.4)',
     badgeText: 'AI-PREDICT',
     description: 'Temporal fusion demand predictions, inventory rebalancing, and stock risk alerts.',
     defaultPos: { x: 50, y: 72, width: 880, height: 680 }
@@ -33,8 +33,8 @@ export const DOCK_SERVICES = [
     label: 'Route & Fleet Optimizer',
     shortLabel: 'Routing',
     viewRequired: 'routing',
-    themeColor: '#00c853', // Signal Emerald
-    accentGlow: 'rgba(0, 200, 83, 0.4)',
+    themeColor: '#10b981', // Signal Emerald
+    accentGlow: 'rgba(16, 185, 129, 0.4)',
     badgeText: 'FLEET-OPT',
     description: 'Dynamic multi-stop vehicle routing, cold-chain telematics, and backhaul matching.',
     defaultPos: { x: 40, y: 72, width: 920, height: 720 }
@@ -44,8 +44,8 @@ export const DOCK_SERVICES = [
     label: 'Trade Compliance & IDP',
     shortLabel: 'Compliance',
     viewRequired: 'compliance',
-    themeColor: '#ff1744', // Vivid Coral
-    accentGlow: 'rgba(255, 23, 68, 0.4)',
+    themeColor: '#8b5cf6', // Compliance Violet
+    accentGlow: 'rgba(139, 92, 246, 0.4)',
     badgeText: 'CUSTOMS-IDP',
     description: 'Automated bill-of-lading processing, HS-code validation, and tariff calculations.',
     defaultPos: { x: 60, y: 72, width: 900, height: 700 }
@@ -55,7 +55,7 @@ export const DOCK_SERVICES = [
     label: 'Autonomous AI Sentinel',
     shortLabel: 'Sentinel',
     viewRequired: 'twin',
-    themeColor: '#06b6d4', // Neon Cyan
+    themeColor: '#06b6d4', // Telematics Cyan
     accentGlow: 'rgba(6, 182, 212, 0.4)',
     badgeText: 'AUTONOMOUS',
     description: 'Real-time corridor threat detection, automated detour execution, and risk telemetry.',
@@ -66,8 +66,8 @@ export const DOCK_SERVICES = [
     label: 'Cesium Twin Studio',
     shortLabel: 'Cesium GIS',
     viewRequired: 'twin',
-    themeColor: '#38bdf8', // Sky Blue
-    accentGlow: 'rgba(56, 189, 248, 0.4)',
+    themeColor: '#06b6d4', // Telematics Cyan
+    accentGlow: 'rgba(6, 182, 212, 0.4)',
     badgeText: 'MACRO-GIS',
     description: 'WGS84 3D geospatial corridor digital twin, shockwave visualizer, and scenario studio.',
     defaultPos: { x: 30, y: 72, width: 960, height: 740 }
@@ -77,8 +77,8 @@ export const DOCK_SERVICES = [
     label: 'IT Administration & Retraining',
     shortLabel: 'Admin',
     viewRequired: 'system',
-    themeColor: '#a855f7', // Cyber Purple
-    accentGlow: 'rgba(168, 85, 247, 0.4)',
+    themeColor: '#8b5cf6', // Compliance/System Violet
+    accentGlow: 'rgba(139, 92, 246, 0.4)',
     badgeText: 'SYSTEM-OPS',
     description: 'PyTorch model retraining studio, system health diagnostics, and audit logs.',
     defaultPos: { x: 80, y: 80, width: 840, height: 660 }

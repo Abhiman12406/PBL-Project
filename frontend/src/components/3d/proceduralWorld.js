@@ -13,8 +13,9 @@
 import * as THREE from 'three';
 import { HIGHWAY_CORRIDORS } from '../../constants/logisticsTopology.js';
 import { projectCorridorWaypoints } from '../../utils/coordinateTransforms.js';
-import { STAGE_FACILITIES } from '../../constants/stage3DTopology.js';
+import { STAGE_FACILITIES, ALL_STAGE_FACILITIES } from '../../constants/stage3DTopology.js';
 import { createFacilityNodeModel } from './proceduralModels.js';
+import { loadGLTF, FACILITY_MODEL_MAP } from '../../utils/modelLoader.js';
 
 /**
  * Builds the primary corridor spline curve from real WGS84 GPS waypoints.
@@ -136,11 +137,12 @@ export function createExtrudedHighwayRibbon(curve, {
   rightShoulder.position.set(shoulderOffset * 0.4, roadWidth * 0.9, shoulderOffset * 0.4);
   roadGroup.add(rightShoulder);
 
-  // Attach reference properties for route glowing
+  // Attach reference properties for route glowing and night mode
   roadGroup.centerLaneMesh = centerLaneMesh;
   roadGroup.centerLaneMat = centerLaneMat;
   roadGroup.leftShoulder = leftShoulder;
   roadGroup.rightShoulder = rightShoulder;
+  roadGroup.shoulderMat = shoulderMat;
 
   return roadGroup;
 }
@@ -227,19 +229,28 @@ export function createKasaraElevationTerrain() {
 }
 
 /**
- * Instantiates all 3D procedural logistics structures across the Western India corridor:
- * JNPT Port, Bhiwandi Central DC, Thane Hub, Kasara Ghat Pass, Nashik Agro Depot, and Pune FC.
+ * Instantiates 3D logistics structures across the Western India corridor:
+ * Streams realistic GLB architectural models for JNPT Port, Panvel Depot, Thane Hub,
+ * Bhiwandi Mega DC, Nashik Depot, and Pune FC, while keeping procedural models as
+ * instant fallbacks. Kasara Ghat renders its dedicated procedural elevation terrain.
+ *
+ * @param {Function} [onSelectNode]
+ * @param {Array} [facilities]
+ * @returns {{ group: THREE.Group, rings: Array, facilitiesMap: Object, loadPromises: Array<Promise> }}
  */
-export function createCorridorLogisticsNodes(onSelectNode) {
+export function createCorridorLogisticsNodes(onSelectNode, facilities = ALL_STAGE_FACILITIES) {
   const group = new THREE.Group();
   group.name = 'CorridorLogisticsFacilities';
   const rings = [];
   const facilitiesMap = {};
+  const loadPromises = [];
 
-  STAGE_FACILITIES.forEach((node) => {
-    // 1. Procedural 3D Architectural Model
-    const model = createFacilityNodeModel(node);
-    group.add(model);
+  const targetFacilities = facilities;
+
+  targetFacilities.forEach((node) => {
+    // 1. Procedural 3D Architectural Model (Instant Fallback)
+    const proceduralModel = createFacilityNodeModel(node);
+    group.add(proceduralModel);
 
     // 2. Holographic Vertical Light Beam
     const beamGeo = new THREE.CylinderGeometry(0.15, 0.45, 18, 12, 1, true);
@@ -252,6 +263,7 @@ export function createCorridorLogisticsNodes(onSelectNode) {
     });
     const beam = new THREE.Mesh(beamGeo, beamMat);
     beam.position.set(node.pos[0], node.pos[1] + 9, node.pos[2]);
+    beam.userData = { isFacility: true, nodeId: node.id, code: node.code, name: node.name };
     group.add(beam);
 
     // 3. Pulsing Ground Ring Indicator
@@ -265,11 +277,80 @@ export function createCorridorLogisticsNodes(onSelectNode) {
     const ringMesh = new THREE.Mesh(ringGeo, ringMat);
     ringMesh.rotation.x = -Math.PI / 2;
     ringMesh.position.set(node.pos[0], node.pos[1] + 0.08, node.pos[2]);
+    ringMesh.userData = { isFacility: true, nodeId: node.id, code: node.code, name: node.name };
     group.add(ringMesh);
 
     rings.push({ mesh: ringMesh, scale: 1, nodeId: node.id });
-    facilitiesMap[node.id] = { model, beam, ringMesh, node };
+
+    // Node Record in facilitiesMap
+    const record = {
+      model: proceduralModel,
+      proceduralModel,
+      glbModel: null,
+      beam,
+      ringMesh,
+      node,
+      isGLBLoaded: false,
+      emissiveMaterials: []
+    };
+    facilitiesMap[node.id] = record;
+
+    // 4. Asynchronous GLB Model Loading with In-Place Swap & Procedural Fallback
+    const glbUrl = FACILITY_MODEL_MAP[node.id] || FACILITY_MODEL_MAP[node.code];
+    if (glbUrl) {
+      const p = loadGLTF(glbUrl)
+        .then(({ scene: glbScene }) => {
+          if (!glbScene) return;
+
+          // Position GLB digital twin at node world coordinates
+          glbScene.position.set(node.pos[0], node.pos[1], node.pos[2]);
+
+          // Tag GLB hierarchy recursively with raycasting metadata and shadow flags
+          glbScene.userData = { isFacility: true, nodeId: node.id, code: node.code, name: node.name };
+          const emissiveMats = [];
+          glbScene.traverse((child) => {
+            if (child.isMesh) {
+              child.userData = { isFacility: true, nodeId: node.id, code: node.code, name: node.name };
+              child.castShadow = true;
+              child.receiveShadow = true;
+
+              if (child.material) {
+                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                mats.forEach((mat) => {
+                  const hasEmissive = mat.emissive && (mat.emissive.r > 0 || mat.emissive.g > 0 || mat.emissive.b > 0);
+                  if (hasEmissive) {
+                    if (mat.userData.baseEmissiveIntensity === undefined) {
+                      mat.userData.baseEmissiveIntensity = (mat.emissiveIntensity !== undefined && mat.emissiveIntensity > 0)
+                        ? mat.emissiveIntensity
+                        : 0.6;
+                    }
+                    if (!emissiveMats.includes(mat)) {
+                      emissiveMats.push(mat);
+                    }
+                  }
+                });
+              }
+            }
+          });
+
+          // In-place swap: hide procedural placeholder, mount GLB twin
+          proceduralModel.visible = false;
+          group.add(glbScene);
+
+          record.model = glbScene;
+          record.glbModel = glbScene;
+          record.isGLBLoaded = true;
+          record.emissiveMaterials = emissiveMats;
+        })
+        .catch((err) => {
+          // Resilient fallback: Keep procedural model visible
+          console.warn(`[proceduralWorld] GLB stream failed for ${node.code} (${node.id}), retaining procedural fallback:`, err?.message || err);
+          proceduralModel.visible = true;
+        });
+
+      loadPromises.push(p);
+    }
   });
 
-  return { group, rings, facilitiesMap };
+  return { group, rings, facilitiesMap, loadPromises };
 }

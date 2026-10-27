@@ -486,12 +486,79 @@ export function createPuneFCModel(node) {
 }
 
 /**
+ * 2B. Panvel Logistics Depot Model
+ * Features multimodal rail-road interchange, container staging yard, and rail freight siding.
+ */
+export function createPanvelDepotModel(node) {
+  const group = new THREE.Group();
+  group.position.set(...node.pos);
+
+  // Concrete Base Apron
+  const apronGeo = new THREE.BoxGeometry(20, 0.4, 18);
+  const apron = new THREE.Mesh(apronGeo, SHARED_MATERIALS.concrete);
+  apron.position.set(0, 0.2, 0);
+  group.add(apron);
+
+  // Central Intermodal Freight Shed
+  const shedGeo = new THREE.BoxGeometry(11, 4.2, 8);
+  const shed = new THREE.Mesh(shedGeo, SHARED_MATERIALS.steelDark);
+  shed.position.set(-2, 2.3, -2);
+  group.add(shed);
+
+  // Translucent Skylight / Solar Roof Band
+  const roofGlassGeo = new THREE.BoxGeometry(9, 0.2, 3);
+  const roofGlass = new THREE.Mesh(roofGlassGeo, SHARED_MATERIALS.solarGlass);
+  roofGlass.position.set(-2, 4.5, -2);
+  group.add(roofGlass);
+
+  // Rail Logistics Siding Tracks
+  const trackBedGeo = new THREE.BoxGeometry(18, 0.15, 3.5);
+  const trackBed = new THREE.Mesh(trackBedGeo, SHARED_MATERIALS.asphalt);
+  trackBed.position.set(0, 0.45, 5.5);
+  group.add(trackBed);
+
+  const railGeo = new THREE.BoxGeometry(18, 0.1, 0.15);
+  const railLeft = new THREE.Mesh(railGeo, SHARED_MATERIALS.steelLight);
+  railLeft.position.set(0, 0.55, 4.8);
+  group.add(railLeft);
+
+  const railRight = new THREE.Mesh(railGeo, SHARED_MATERIALS.steelLight);
+  railRight.position.set(0, 0.55, 6.2);
+  group.add(railRight);
+
+  // Intermodal Container Stacks
+  const containerGeo = new THREE.BoxGeometry(4.8, 1.8, 1.8);
+  const cOrange = new THREE.Mesh(containerGeo, SHARED_MATERIALS.craneOrange);
+  cOrange.position.set(5.5, 1.3, -4);
+  group.add(cOrange);
+
+  const cYellow = new THREE.Mesh(containerGeo, SHARED_MATERIALS.craneYellow);
+  cYellow.position.set(5.5, 3.1, -4);
+  group.add(cYellow);
+
+  // Multimodal Siding Beacon Mast
+  const mastGeo = new THREE.CylinderGeometry(0.12, 0.2, 9, 8);
+  const mast = new THREE.Mesh(mastGeo, SHARED_MATERIALS.steelLight);
+  mast.position.set(-8, 4.5, 6);
+  group.add(mast);
+
+  const beaconGeo = new THREE.SphereGeometry(0.35, 8, 8);
+  const beacon = new THREE.Mesh(beaconGeo, SHARED_MATERIALS.neonCyan);
+  beacon.position.set(-8, 9, 6);
+  group.add(beacon);
+
+  return tagFacilityMesh(group, node.id, node.code, node.name);
+}
+
+/**
  * Factory dispatch mapping node codes to procedural 3D models.
  */
 export function createFacilityNodeModel(node) {
   switch (node.code) {
     case 'JNPT':
       return createJNPTPortModel(node);
+    case 'PANVEL':
+      return createPanvelDepotModel(node);
     case 'BHIWANDI':
       return createBhiwandiDCModel(node);
     case 'THANE':

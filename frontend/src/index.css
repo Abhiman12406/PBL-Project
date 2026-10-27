@@ -16,13 +16,20 @@
     --obsidian-elevated: #111827;
     --obsidian-border: #1e293b;
 
-    /* Bright Signature Logistics & Cyber Accents */
+    /* Canonical NeoLogix Design System Color Palette (DESIGN.md) */
+    --color-primary-cyan: #06b6d4;
+    --color-signal-emerald: #10b981;
+    --color-solar-amber: #f59e0b;
+    --color-hazard-coral: #f43f5e;
+    --color-compliance-violet: #8b5cf6;
     --color-safety-orange: #ff5400;
-    --color-signal-green: #00c853;
-    --color-solar-yellow: #ffb703;
-    --color-vivid-coral: #ff1744;
+
+    /* Backward-compatible token aliases */
     --color-neon-cyan: #06b6d4;
-    --color-cyber-purple: #a855f7;
+    --color-signal-green: #10b981;
+    --color-solar-yellow: #f59e0b;
+    --color-vivid-coral: #f43f5e;
+    --color-cyber-purple: #8b5cf6;
   }
 
   body {

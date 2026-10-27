@@ -11,7 +11,7 @@
  */
 
 import { wgs84ToWorldCoordinates, worldToWgs84Coordinates } from './coordinateTransforms.js';
-import { STAGE_NODES, STAGE_FACILITIES, PUNE_FC_NODE } from '../constants/stage3DTopology.js';
+import { STAGE_NODES, STAGE_FACILITIES, ALL_STAGE_FACILITIES, PANVEL_DEPOT_NODE, PUNE_FC_NODE } from '../constants/stage3DTopology.js';
 import { FACILITY_NODES, CAMERA_PRESETS, SCHEMATIC_COORDS } from '../constants/logisticsTopology.js';
 
 export const STAGE_ENGINES = {
@@ -89,34 +89,71 @@ export function mapFacilityBetweenEngines(identifier) {
   const clean = String(identifier).toUpperCase().trim();
 
   // 1. Direct ID match
-  let stageNode = STAGE_FACILITIES.find((n) => n.id.toUpperCase() === clean || n.code.toUpperCase() === clean);
+  let stageNode = (ALL_STAGE_FACILITIES || STAGE_FACILITIES).find((n) => n.id.toUpperCase() === clean || n.code.toUpperCase() === clean);
   let cesiumNode = FACILITY_NODES.find((n) => n.node_id.toUpperCase() === clean || n.shortName.toUpperCase() === clean);
 
-  // 2. Special aliases for Kasara Ghat
-  if (!stageNode && (clean.includes('KASARA') || clean === 'PASS-KASARA-01')) {
-    stageNode = STAGE_FACILITIES.find((n) => n.code === 'KASARA');
-  }
-  if (!cesiumNode && (clean.includes('KASARA') || clean === 'PASS-KASARA-01')) {
-    // Kasara Ghat is a designated camera preset & elevation point in Cesium
-    cesiumNode = {
-      node_id: 'PASS-KASARA-01',
-      name: 'Kasara Ghat Mountain Pass',
-      shortName: 'Kasara Ghat',
-      echelon_tier: 3,
-      tier_label: 'Mountain Pass Bottleneck',
-      city: 'Kasara',
-      latitude: CAMERA_PRESETS.KASARA_GHAT.latitude,
-      longitude: CAMERA_PRESETS.KASARA_GHAT.longitude,
-      cameraPreset: CAMERA_PRESETS.KASARA_GHAT
-    };
+  // 2. Resolve by Known Facility Aliases & Camera Preset Keys
+  if (!stageNode) {
+    if (clean.includes('JNPT')) {
+      stageNode = (ALL_STAGE_FACILITIES || STAGE_FACILITIES).find((n) => n.code === 'JNPT');
+    } else if (clean.includes('PANVEL') || clean.includes('PNV')) {
+      stageNode = PANVEL_DEPOT_NODE;
+    } else if (clean.includes('THN') || clean.includes('THANE')) {
+      stageNode = (ALL_STAGE_FACILITIES || STAGE_FACILITIES).find((n) => n.code === 'THANE');
+    } else if (clean.includes('BHW') || clean.includes('BHIWANDI')) {
+      stageNode = (ALL_STAGE_FACILITIES || STAGE_FACILITIES).find((n) => n.code === 'BHIWANDI');
+    } else if (clean.includes('KASARA') || clean === 'PASS-KASARA-01') {
+      stageNode = (ALL_STAGE_FACILITIES || STAGE_FACILITIES).find((n) => n.code === 'KASARA');
+    } else if (clean.includes('NSK') || clean.includes('NASHIK')) {
+      stageNode = (ALL_STAGE_FACILITIES || STAGE_FACILITIES).find((n) => n.code === 'NASHIK');
+    } else if (clean.includes('PUN') || clean === 'FC-PUN-01') {
+      stageNode = PUNE_FC_NODE;
+    }
   }
 
-  // 3. Pune Fulfillment Center fallback
-  if (!stageNode && (clean.includes('PUN') || clean === 'FC-PUN-01')) {
-    stageNode = PUNE_FC_NODE;
-  }
-  if (!cesiumNode && (clean.includes('PUN') || clean === 'FC-PUN-01')) {
-    cesiumNode = FACILITY_NODES.find((n) => n.node_id === 'FC-PUN-01');
+  if (!cesiumNode) {
+    if (clean.includes('JNPT')) {
+      cesiumNode = FACILITY_NODES.find((n) => n.node_id === 'PORT-JNPT-01');
+    } else if (clean.includes('PANVEL') || clean.includes('PNV')) {
+      cesiumNode = FACILITY_NODES.find((n) => n.node_id === 'DEP-PNV-01') || {
+        node_id: 'DEP-PNV-01',
+        name: 'Panvel Logistics Depot',
+        shortName: 'Panvel Depot',
+        echelon_tier: 2,
+        tier_label: 'Tier 2 Multimodal Siding',
+        city: 'Panvel',
+        latitude: 18.9894,
+        longitude: 73.1175,
+        cameraPreset: {
+          longitude: 73.1175,
+          latitude: 18.9894,
+          height: 3600,
+          heading: 20,
+          pitch: -35,
+          roll: 0
+        }
+      };
+    } else if (clean.includes('THN') || clean.includes('THANE')) {
+      cesiumNode = FACILITY_NODES.find((n) => n.node_id === 'HUB-THN-01');
+    } else if (clean.includes('BHW') || clean.includes('BHIWANDI')) {
+      cesiumNode = FACILITY_NODES.find((n) => n.node_id === 'DC-BHW-01');
+    } else if (clean.includes('KASARA') || clean === 'PASS-KASARA-01') {
+      cesiumNode = {
+        node_id: 'PASS-KASARA-01',
+        name: 'Kasara Ghat Mountain Pass',
+        shortName: 'Kasara Ghat',
+        echelon_tier: 3,
+        tier_label: 'Mountain Pass Bottleneck',
+        city: 'Kasara',
+        latitude: CAMERA_PRESETS.KASARA_GHAT.latitude,
+        longitude: CAMERA_PRESETS.KASARA_GHAT.longitude,
+        cameraPreset: CAMERA_PRESETS.KASARA_GHAT
+      };
+    } else if (clean.includes('NSK') || clean.includes('NASHIK')) {
+      cesiumNode = FACILITY_NODES.find((n) => n.node_id === 'DEP-NSK-01');
+    } else if (clean.includes('PUN') || clean === 'FC-PUN-01') {
+      cesiumNode = FACILITY_NODES.find((n) => n.node_id === 'FC-PUN-01');
+    }
   }
 
   const normalizedId = stageNode?.id || cesiumNode?.node_id || clean;
@@ -124,10 +161,13 @@ export function mapFacilityBetweenEngines(identifier) {
   // Derive preset key
   let presetKey = 'CORRIDOR_OVERVIEW';
   if (clean.includes('JNPT')) presetKey = 'JNPT_PORT';
+  else if (clean.includes('PANVEL') || clean.includes('PNV')) presetKey = 'PANVEL_DEPOT';
+  else if (clean.includes('THN') || clean.includes('THANE')) presetKey = 'THANE_HUB';
   else if (clean.includes('BHW') || clean.includes('BHIWANDI')) presetKey = 'BHIWANDI_DC';
   else if (clean.includes('KASARA')) presetKey = 'KASARA_PASS';
   else if (clean.includes('NSK') || clean.includes('NASHIK')) presetKey = 'NASHIK_DEPOT';
-  else if (clean.includes('THN') || clean.includes('THANE')) presetKey = 'OVERVIEW';
+  else if (clean.includes('PUN')) presetKey = 'PUNE_FC';
+  else if (clean.includes('OVERVIEW')) presetKey = 'OVERVIEW';
 
   return {
     stageNode: stageNode || null,

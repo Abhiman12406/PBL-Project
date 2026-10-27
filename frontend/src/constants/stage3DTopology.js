@@ -21,7 +21,7 @@ export const STAGE_NODES = [
     name: 'Thane Regional Hub',
     tier: 'Tier 3 Regional Hub',
     pos: [-24, 0, 16],
-    color: '#a855f7', // Purple
+    color: '#8b5cf6', // Violet
     iconName: 'Warehouse',
     details: 'Suburban micro-hub serving Mumbai Metropolitan Region & dark stores.'
   },
@@ -41,7 +41,7 @@ export const STAGE_NODES = [
     name: 'Kasara Ghat Mountain Pass',
     tier: 'Western Ghats Elevation Crest (Elevation +580m)',
     pos: [14, 9.5, -24],
-    color: '#ffb703', // Amber
+    color: '#f59e0b', // Solar Amber
     iconName: 'Mountain',
     details: 'Steep NH-160 mountain pass ascent. Critical bottleneck vulnerable to monsoon mudslides.'
   },
@@ -51,11 +51,22 @@ export const STAGE_NODES = [
     name: 'Nashik Agro Depot',
     tier: 'Tier 3 Regional Depot',
     pos: [42, 6.5, -48],
-    color: '#00c853', // Emerald
+    color: '#10b981', // Signal Emerald
     iconName: 'Warehouse',
     details: 'Northern agricultural and industrial transit depot accessed via NH-160.'
   }
 ];
+
+export const PANVEL_DEPOT_NODE = {
+  id: 'DEP-PNV-01',
+  code: 'PANVEL',
+  name: 'Panvel Logistics Depot',
+  tier: 'Tier 2 Multimodal Siding',
+  pos: [-34, 0, 24],
+  color: '#06b6d4', // Cyan
+  iconName: 'Warehouse',
+  details: 'Multimodal rail-road interchange and container staging depot.'
+};
 
 export const PUNE_FC_NODE = {
   id: 'FC-PUN-01',
@@ -73,6 +84,16 @@ export const STAGE_FACILITIES = [
   PUNE_FC_NODE
 ];
 
+export const ALL_STAGE_FACILITIES = [
+  STAGE_NODES[0], // JNPT
+  PANVEL_DEPOT_NODE, // PANVEL
+  STAGE_NODES[1], // THANE
+  STAGE_NODES[2], // BHIWANDI
+  STAGE_NODES[3], // KASARA
+  STAGE_NODES[4], // NASHIK
+  PUNE_FC_NODE // PUNE
+];
+
 export const CAMERA_VIEWS = {
   OVERVIEW: {
     name: 'Corridor Overview',
@@ -88,6 +109,16 @@ export const CAMERA_VIEWS = {
     name: 'JNPT Maritime Port',
     position: [-36, 16, 50],
     target: [-44, 0, 32]
+  },
+  PANVEL_DEPOT: {
+    name: 'Panvel Logistics Depot',
+    position: [-24, 14, 40],
+    target: [-34, 0, 24]
+  },
+  THANE_HUB: {
+    name: 'Thane Regional Hub',
+    position: [-14, 14, 32],
+    target: [-24, 0, 16]
   },
   BHIWANDI_DC: {
     name: 'Bhiwandi Mega DC',

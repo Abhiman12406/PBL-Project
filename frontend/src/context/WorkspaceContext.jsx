@@ -131,6 +131,79 @@ export function WorkspaceProvider({ children }) {
     timestamp: Date.now()
   });
 
+  // Simplified Navigation & Workspace View Modes: 'docked' (split view), 'floating' (OS windows), 'immersive' (3D only)
+  const [workspaceMode, setWorkspaceModeState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('neologix_workspace_mode') || 'docked';
+    }
+    return 'docked';
+  });
+
+  const setWorkspaceMode = useCallback((mode) => {
+    setWorkspaceModeState(mode);
+    try {
+      localStorage.setItem('neologix_workspace_mode', mode);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const [activeDockedTab, setActiveDockedTab] = useState('kpis');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+
+  // Cockpit Anchored Rail Visibility & Expansion States
+  const [leftRailCollapsed, setLeftRailCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1200;
+    }
+    return false;
+  });
+  const [rightRailCollapsed, setRightRailCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024;
+    }
+    return false;
+  });
+  const [rightRailExpanded, setRightRailExpanded] = useState(false);
+
+  // Auto-collapse rails on smaller viewports
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window !== 'undefined') {
+        if (window.innerWidth < 1200) {
+          setLeftRailCollapsed(true);
+        }
+        if (window.innerWidth < 1024) {
+          setRightRailCollapsed(true);
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
+  const toggleGuide = useCallback(() => setGuideOpen((prev) => !prev), []);
+
+  const quickLaunchFeature = useCallback((serviceId) => {
+    setActiveDockedTab(serviceId);
+    setWindows((prev) => {
+      const current = prev[serviceId];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [serviceId]: {
+          ...current,
+          isOpen: true,
+          isMinimized: false,
+          zIndex: 40
+        }
+      };
+    });
+  }, []);
+
   const toggleStageEngine = useCallback(() => {
     setActiveStageEngine((prev) => (prev === 'tactical_3d' ? 'cesium_gis' : 'tactical_3d'));
   }, []);
@@ -577,7 +650,24 @@ export function WorkspaceProvider({ children }) {
     resetLayout,
     minimizeAll,
     restoreAll,
-    isAllowed
+    isAllowed,
+    workspaceMode,
+    setWorkspaceMode,
+    activeDockedTab,
+    setActiveDockedTab,
+    sidebarOpen,
+    setSidebarOpen,
+    toggleSidebar,
+    guideOpen,
+    setGuideOpen,
+    toggleGuide,
+    quickLaunchFeature,
+    leftRailCollapsed,
+    setLeftRailCollapsed,
+    rightRailCollapsed,
+    setRightRailCollapsed,
+    rightRailExpanded,
+    setRightRailExpanded
   }), [
     windows,
     highestZIndex,
@@ -615,7 +705,21 @@ export function WorkspaceProvider({ children }) {
     resetLayout,
     minimizeAll,
     restoreAll,
-    isAllowed
+    isAllowed,
+    workspaceMode,
+    setWorkspaceMode,
+    activeDockedTab,
+    setActiveDockedTab,
+    sidebarOpen,
+    setSidebarOpen,
+    toggleSidebar,
+    guideOpen,
+    setGuideOpen,
+    toggleGuide,
+    quickLaunchFeature,
+    leftRailCollapsed,
+    rightRailCollapsed,
+    rightRailExpanded
   ]);
 
 
